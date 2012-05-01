@@ -69,7 +69,11 @@ struct tslib_input {
 #define BITS_PER_BYTE           8
 #define BITS_PER_LONG           (sizeof(long) * BITS_PER_BYTE)
 #define BITS_TO_LONGS(nr)       DIV_ROUND_UP(nr, BITS_PER_BYTE * sizeof(long))
+#ifndef EV_CNT
+#define EV_CNT	(EV_MAX+1)
+#endif
 
+int old_api = 0;
 static int check_fd(struct tslib_input *i)
 {
 	struct tsdev *ts = i->module.dev;
@@ -84,8 +88,28 @@ static int check_fd(struct tslib_input *i)
 	}
 
 	if (version < EV_VERSION) {
-		fprintf(stderr, "tslib: Selected device uses a different version of the event protocol than tslib was compiled for\n");
-		return -1;
+		unsigned long bit[EV_CNT / BITS_PER_LONG + 1];
+		unsigned long absbit[ABS_MAX / BITS_PER_LONG + 1];
+
+		if (version != 0x010000) {
+			fprintf(stderr, "tslib: Selected device uses a different version(%d) of the event protocol than tslib was compiled for(%d)\n",
+				version, EV_VERSION);
+			return -1;
+		}
+
+		if (! (	(ioctl(ts->fd, EVIOCGBIT(0, sizeof(bit)), bit) >= 0) &&
+			(bit[0] & (1 << EV_ABS)) &&
+			(ioctl(ts->fd, EVIOCGBIT(EV_ABS, sizeof(absbit)), absbit) >= 0) &&
+			(absbit[0] & (1 << ABS_X)) &&
+			(absbit[0] & (1 << ABS_Y)) && (absbit[0] & (1 << ABS_PRESSURE)))) {
+			fprintf(stderr, "selected device is not a touchscreen I understand\n");
+			return -1;
+		}
+
+		if (bit[0] & (1 << EV_SYN))
+			i->using_syn = 1;
+		old_api = 1;
+		return 0;
 	}
 
 	if ( (ioctl(ts->fd, EVIOCGBIT(0, sizeof(evbit)), evbit) < 0) ||
