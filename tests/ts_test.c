@@ -199,7 +199,7 @@ int main()
 					quit_pressed = 1;
 				}
 
-		printf("%ld.%06ld: %6d %6d %6d\n", samp.tv.tv_sec, samp.tv.tv_usec,
+		if (0) printf("%ld.%06ld: %6d %6d %6d\n", samp.tv.tv_sec, samp.tv.tv_usec,
 			samp.x, samp.y, samp.pressure);
 
 		if (samp.pressure > 0) {
