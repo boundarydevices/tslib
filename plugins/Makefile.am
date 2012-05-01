@@ -24,6 +24,12 @@ else
 LINEAR_MODULE =
 endif
 
+if ENABLE_LINEAR_QUAD_MODULE
+LINEAR_QUAD_MODULE = linear_quad.la
+else
+LINEAR_QUAD_MODULE =
+endif
+
 if ENABLE_LINEAR_MODULE
 DEJITTER_MODULE = dejitter.la
 else
@@ -116,6 +122,7 @@ endif
 
 pluginexec_LTLIBRARIES = \
 	$(LINEAR_MODULE) \
+	$(LINEAR_QUAD_MODULE) \
 	$(DEJITTER_MODULE) \
 	$(VARIANCE_MODULE) \
 	$(PTHRES_MODULE) \
@@ -143,6 +150,10 @@ dejitter_la_LIBADD	= $(top_builddir)/src/libts.la
 linear_la_SOURCES	= linear.c
 linear_la_LDFLAGS	= -module $(LTVSN)
 linear_la_LIBADD	= $(top_builddir)/src/libts.la
+
+linear_quad_la_SOURCES	= linear_quad.c
+linear_quad_la_LDFLAGS	= -module $(LTVSN)
+linear_quad_la_LIBADD	= $(top_builddir)/src/libts.la
 
 pthres_la_SOURCES	= pthres.c
 pthres_la_LDFLAGS	= -module $(LTVSN)
