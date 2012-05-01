@@ -51,6 +51,7 @@ AC_CHECK_FUNCS([gettimeofday memmove memset munmap select strcasecmp strchr strd
 
 # filters
 TSLIB_CHECK_MODULE([linear], [yes], [Enable building of linear scaling])
+TSLIB_CHECK_MODULE([linear_quad], [yes], [Enable building of linear quadrant scaling])
 TSLIB_CHECK_MODULE([dejitter], [yes], [Enable building of dejitter filter])
 TSLIB_CHECK_MODULE([linear-h2200], [yes], [Enable building of linearizing filter for iPAQ h2200])
 TSLIB_CHECK_MODULE([variance], [yes], [Enable building of variance filter])
