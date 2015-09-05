@@ -25,6 +25,8 @@
 #include <linux/kd.h>
 #include <linux/vt.h>
 #include <linux/fb.h>
+#include <linux/input.h>
+#include "tslib-private.h"
 
 #include "tslib.h"
 
@@ -69,7 +71,7 @@ static void get_sample (struct tsdev *ts, struct cal_data *cal,
 	}
 
 	put_cross(x, y, 2 | XORMODE);
-	getxy(ts, &cal->i, &cal->j);
+	getxy(ts, (int*)&cal->i, (int*)&cal->j);
 	put_cross(x, y, 2 | XORMODE);
 
 	last_x = cal->x = x;
@@ -81,7 +83,7 @@ static void get_sample (struct tsdev *ts, struct cal_data *cal,
 int main()
 {
 	struct tsdev *ts;
-	struct cal_data cal[5];
+	struct cal_data cal[9];
 	struct cal_result res[5];
 	int cal_fd;
 	char cal_buffer[256];
@@ -89,7 +91,14 @@ int main()
 	char *calfile = NULL;
 	unsigned int i;
 	int r;
+	int r1;
 	int dx, dy;
+	unsigned nconst = 6;
+	unsigned ngroups = 5;
+	unsigned npoints = 5;
+	struct input_absinfo abs;
+	int iMax = 2048;
+	int jMax = 2048;
 
 	signal(SIGSEGV, sig);
 	signal(SIGINT, sig);
@@ -135,19 +144,47 @@ int main()
 
 	dy = 50;
 	dx = (dy * xres) / yres;
-	get_sample(ts, &cal[PT_LEFT_TOP],     dx,            dy,            "Top left");
-	get_sample(ts, &cal[PT_RIGHT_TOP],    xres - 1 - dx, dy,            "Top right");
-	get_sample(ts, &cal[PT_RIGHT_BOTTOM], xres - 1 - dx, yres - 1 - dy, "Bot right");
-	get_sample(ts, &cal[PT_LEFT_BOTTOM],  dx,        yres - dy,         "Bot left");
-	get_sample(ts, &cal[PT_CENTER],       xres / 2,  yres / 2,          "Center");
+	get_sample(ts, &cal[PT_LT], dx,            dy,            "left top");
+	get_sample(ts, &cal[PT_MT], xres / 2,      dy,            "mid top ");
+	get_sample(ts, &cal[PT_RT], xres - 1 - dx, dy,            "right top");
+
+	get_sample(ts, &cal[PT_LM], dx,            yres / 2,      "left mid");
+	get_sample(ts, &cal[PT_MM], xres / 2,      yres / 2,      "Center");
+	get_sample(ts, &cal[PT_RM], xres - 1 - dx, yres / 2,      "right mid");
+
+	get_sample(ts, &cal[PT_LB], dx,            yres - 1 - dy, "left bottom");
+	get_sample(ts, &cal[PT_MB], xres / 2,      yres - 1 - dy, "mid bottom");
+	get_sample(ts, &cal[PT_RB], xres - 1 - dx, yres - 1 - dy, "right bottom");
+
+	if (ioctl(ts->fd, EVIOCGABS(0), &abs) == 0) {
+		iMax = abs.maximum + 1;
+		printf("iMax = %d\n", iMax);
+	} else {
+		printf("iMax read error, defaulting to 2048\n");
+	}
+	if (ioctl(ts->fd, EVIOCGABS(1), &abs) == 0) {
+		jMax = abs.maximum + 1;
+		printf("jMax = %d\n", jMax);
+	} else {
+		printf("jMax read error, defaulting to 2048\n");
+	}
 
 	r = perform_q_calibration(cal, res);
+	r1 = perform_n_point_calibration(cal, 9, xres, yres, iMax, jMax, res);
+	if (r >= 0) {
+		r = r1;
+		nconst = 12;
+		ngroups = 1;
+		npoints = 9;
+	}
+
 	if (r >= 0) {
 		int ret;
-		int q;
+		unsigned q;
+
 		printf ("Calibration constants: ");
-		for (q = 0; q < 5; q++) {
-			for (i = 0; i < 6; i++)
+		for (q = 0; q < ngroups; q++) {
+			for (i = 0; i < nconst; i++)
 				printf("%d ", res[q].a[i]);
 			printf("shift %d\n", res[q].shift);
 		}
@@ -156,7 +193,7 @@ int main()
 			calfile = TS_POINTERCAL;
 		cal_fd = open(calfile, O_TRUNC | O_CREAT | O_RDWR, S_IRWXU | S_IRWXG | S_IRWXO);
 		printf("calibrate file: %s\n", calfile);
-		for (i = 0; i < 5; i++) {
+		for (i = 0; i < npoints; i++) {
 			struct cal_data *d = &cal[i];
 			int length = sprintf(cal_buffer,"(%d,%d)(%d,%d)\n",
 				 d->x, d->y, d->i, d->j);

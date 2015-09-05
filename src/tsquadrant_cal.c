@@ -1,6 +1,429 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <strings.h>
+#include <string.h>
 #include "tsquadrant_cal.h"
+#define DEBUG
+/*
+let i,j be numbers between 0 and <1 (touchscreen reading/max res)
+let x,y be numbers between 0 and <1 (screen pos/max screen dimension)
+
+x = a1 + a2*i + a3*j + a4*i*j + a5*i*i + a6*j*j
+
+|x| = |a1 a2 a3 a4 a5 a6| | 1   |
+|y|   |b1 b2 b3 b4 b5 b6| | i   |
+			  | j   |
+			  | i*j |
+			  | i*i |
+			  | j*j |
+
+
+| x1  x2  x3 x4 x5 x6|  =  | a1  a2  a3  a4 a5 a6| | 1      1       1      1      1      1    |
+| y1  y2  y3 y4 y5 y6|     | b1  b2  b3  b4 b5 b6| | i1     i2      i3     i4     i5     i6   |
+						   | j1     j2      j3     j4     j5     j6   |
+						   | i1*j1  i2*j2   i3*j3  i4*j4  i5*j5  i6*j6|
+						   | i1*i1  i2*i2   i3*i3  i4*i4  i5*i5  i6*i6|
+						   | j1*j1  j2*j2   j3*j3  j4*j4  j5*j5  j6*j6|
+
+For multiple points, _ means summation
+| _x _xi _xj  _xij _xi2 _xj2| = | a1 a2 a3 a4 a5 a6|	| n    _i      _j     _ij    _i2    _j2  |
+| _y _yi _yj  _yij _yi2 _yj2|   | b1 b2 b3 b4 b5 b6|	|_i    _i2     _ij    _i2j   _i3    _ij2 |
+							|_j    _ij     _j2    _ij2   _i2j   _j3  |
+							|_ij   _i2j    _ij2   _i2j2  _i3j   _ij3 |
+							|_i2   _i3     _i2j   _i3j   _i4    _i2j2|
+							|_j2   _ij2    _j3    _ij3   _i2j2  _j4  |
+
+
+Numbers by i or j mean ** (squared or cubed or 4th power)
+
+| _x _xi _xj  _xij _xi2 _xj2|	| n    _i     _j    _ij    _i2    _j2  | -1 = | a1 a2 a3 a4 a5 a6 |
+| _y _yi _yj  _yij _yi2 _yj2|	|_i    _i2    _ij   _i2j   _i3    _ij2 |      | b1 b2 b3 b4 b5 b6 |
+				|_j    _ij    _j2   _ij2   _i2j   _j3  |
+				|_ij   _i2j   _ij2  _i2j2  _i3j   _ij3 |
+				|_i2   _i3    _i2j  _i3j   _i4    _i2j2|
+				|_j2   _ij2   _j3   _ij3   _i2j2  _j4  |
+(A)-1 = 1/det(A) * adj(A)
+adj(A)ij = (-1)**(i+j) det(minor_ji(A))
+ */
+#define USE_FLOAT
+#ifdef USE_FLOAT
+#define utype long double
+#define stype long double
+#define DFORMAT "%Lf"
+#define FIXED_FORMAT "%016Lf"
+#else
+#define utype u64
+#define stype s64
+#endif
+
+/* Symmetrical matrix, only half filled in */
+static utype get_element(utype *s, unsigned row, unsigned col)
+{
+	if (row <= col)
+		return s[row * 6 + col];
+	return s[col * 6 + row];
+}
+
+/* Symmetrical matrix, only half filled in */
+static stype get_adj_element(stype *d, unsigned row, unsigned col)
+{
+	if (row <= col)
+		return d[row * 6 + col];
+	return d[col * 6 + row];
+}
+
+static stype mull(stype m, utype e)
+{
+#ifdef USE_FLOAT
+	return m * e;
+#else
+	u32 mh, ml, eh, el;
+	u32 sign = (m < 0) ? ~0 : 0;
+	u32 s[4];
+	u64 t;
+	u32 v;
+	u32 sign2;
+
+	if (sign)
+		m = -m;
+
+	mh = m >> 32;
+	ml = (m & 0xffffffff);
+	eh = e >> 32;
+	el = (e & 0xffffffff);
+
+	t = ml * (u64)el;
+	s[0] = (u32)t;
+	s[1] = t >> 32;
+	s[2] = 0;
+	s[3] = 0;
+
+	t = ml * (u64)eh;
+	v = (u32)t;
+	s[1] += v;
+	if (s[1] < v)
+		s[2]++;
+	v = t >> 32;
+	s[2] += v;
+	if (s[2] < v)
+		s[3]++;
+
+	t = mh * (u64)el;
+	v = (u32)t;
+	s[1] += v;
+	if (s[1] < v)
+		s[2]++;
+	v = t >> 32;
+	s[2] += v;
+	if (s[2] < v)
+		s[3]++;
+
+	t = mh * (u64)eh;
+	v = (u32)t;
+	s[2] += v;
+	if (s[2] < v)
+		s[3]++;
+	v = t >> 32;
+	s[3] += v;
+
+
+	if (sign) {
+		s[0] = ~s[0];
+		s[1] = ~s[1];
+		s[2] = ~s[2];
+		s[3] = ~s[3];
+		s[0]++;
+		if (!s[0]) {
+			s[1]++;
+			if (!s[1]) {
+				s[2]++;
+				if (!s[2]) {
+					s[3]++;
+				}
+			}
+		}
+	}
+	sign2 = (s[2] >> 31) ? ~0: 0;
+	if ((sign != sign2) || (sign != s[3]))
+		printf("%s: overflow %d %llx %llx\n", __func__, s[3], m, e);
+
+	return (((s64)s[2]) << 32) | s[1];
+#endif
+}
+
+static stype determinate(utype *s, unsigned row_mask, unsigned col_mask)
+{
+	unsigned col = ffs(col_mask) - 1;
+	unsigned row = ffs(row_mask) - 1;
+	stype det = 0;
+	int neg = 0;
+	unsigned r_mask = row_mask & ~(1 << row);
+
+	if (!r_mask)
+		return get_element(s, row, col);
+
+	while (col < 6) {
+		if (col_mask & (1 << col)) {
+			unsigned c_mask = col_mask & ~(1 << col);
+			stype m = determinate(s, r_mask, c_mask);
+			utype e = get_element(s, row, col);
+
+#ifndef USE_FLOAT
+			if (e > (1ULL << 32))
+				printf("!!!%s: e (%llx) too big\n", __func__, e);
+#endif
+#ifdef DEBUG
+#ifdef USE_FLOAT
+//			printf("%s: m = " DFORMAT " e= " DFORMAT "\n", __func__, m, e);
+#else
+//			printf("%s: m = 0x%llx e=0x%llx\n", __func__, m, e);
+#endif
+#endif
+			m = mull(m, e);
+			if (neg)
+				m = -m;
+			det += m;
+			neg ^= 1;
+		}
+		col++;
+	}
+#ifdef DEBUG
+#ifdef USE_FLOAT
+//	printf("%s: det = " DFORMAT "\n", __func__, det);
+#else
+//	printf("%s: det = 0x%llx\n", __func__, det);
+#endif
+#endif
+	return det;
+}
+
+utype cval(u32 n) {
+#ifdef USE_FLOAT
+	return (utype)n;
+#else
+	return (utype)n << 32;
+#endif
+}
+
+utype mval(utype a, utype b) {
+#ifdef USE_FLOAT
+	return a * b;
+#else
+	return (a * b) >> 32;
+#endif
+}
+
+TSAPI extern int perform_n_point_calibration(struct cal_data *cal,
+		int num_points, u32 xmax, u32 ymax, u32 imax, u32 jmax,
+		struct cal_result *res)
+{
+	s32 a[2][6];
+	utype r[2][6];
+	utype s[6 * 6];
+	stype d[6 * 6];
+	unsigned row;
+	unsigned col;
+	stype det;
+	int p;
+
+	printf("xmax=%d, ymax=%d imax=%d, jmax=%d\n", xmax, ymax, imax, jmax);
+
+	memset(a, 0, sizeof(a));
+	memset(r, 0, sizeof(r));
+	memset(s, 0, sizeof(s));
+
+	s[0 * 6 + 0] = cval(num_points);
+
+	for (p = 0; p < num_points; p++) {
+		struct cal_data *d = &cal[p];
+		utype x = cval(d->x) / xmax;
+		utype y = cval(d->y) / ymax;
+		utype i = cval(d->i) / imax;
+		utype j = cval(d->j) / jmax;
+		utype ij = mval(i, j);
+		utype i2 = mval(i, i);
+		utype j2 = mval(j, j);
+
+#ifndef USE_FLOAT
+		if ((x | y | i | j) >= (1ULL << 32))
+			printf("!!!x=%d y=%d i=%d j=%d\n", d->x, d->y, d->i, d->j);
+#endif
+
+		r[0][0] += x;
+		r[0][1] += mval(x, i);
+		r[0][2] += mval(x, j);
+		r[0][3] += mval(x, ij);
+		r[0][4] += mval(x, i2);
+		r[0][5] += mval(x, j2);
+
+		r[1][0] += y;
+		r[1][1] += mval(y, i);
+		r[1][2] += mval(y, j);
+		r[1][3] += mval(y, ij);
+		r[1][4] += mval(y, i2);
+		r[1][5] += mval(y, j2);
+/*		   0     1     2     3      4      5
+		0| n    _i     _j    _ij    _i2    _j2  |
+		1|_i    _i2    _ij   _i2j   _i3    _ij2 |
+		2|_j    _ij    _j2   _ij2   _i2j   _j3  |
+		3|_ij   _i2j   _ij2  _i2j2  _i3j   _ij3 |
+		4|_i2   _i3    _i2j  _i3j   _i4    _i2j2|
+		5|_j2   _ij2   _j3   _ij3   _i2j2  _j4  |
+*/
+
+		s[0 * 6 + 1] += i;
+		s[1 * 6 + 1] += i2;
+
+		s[0 * 6 + 2] += j;
+		s[1 * 6 + 2] += ij;
+		s[2 * 6 + 2] += j2;
+
+		s[1 * 6 + 3] += mval(i, ij);	/* i2j */
+		s[2 * 6 + 3] += mval(j, ij);	/* ij2 */
+		s[3 * 6 + 3] += mval(ij, ij);	/* i2j2 */
+
+		s[1 * 6 + 4] += mval(i, i2);	/* i3 */
+		s[3 * 6 + 4] += mval(ij, i2);	/* i3j */
+		s[4 * 6 + 4] += mval(i2, i2);	/* i4 */
+
+		s[2 * 6 + 5] += mval(j, j2);	/* j3 */
+		s[3 * 6 + 5] += mval(ij, j2);	/* ij3 */
+		s[5 * 6 + 5] += mval(j2, j2);	/* j4 */
+	}
+	s[0 * 6 + 3] = s[1 * 6 + 2];	/* ij */
+
+	s[0 * 6 + 4] = s[1 * 6 + 1];	/* i2 */
+	s[2 * 6 + 4] = s[1 * 6 + 3];	/* i2j */
+
+	s[0 * 6 + 5] = s[2 * 6 + 2];	/* j2 */
+	s[1 * 6 + 5] = s[2 * 6 + 3];	/* ij2 */
+	s[4 * 6 + 5] = s[3 * 6 + 3];	/* i2j2 */
+
+#ifndef USE_FLOAT
+	/* Now average all the values */
+	for (row = 0; row < 2; row ++)
+		for (col = 0; col < 6; col ++)
+			r[row][col] /= num_points;
+
+	for (row = 0; row < 6; row ++)
+		for (col = row; col < 6; col ++)
+			s[row * 6 + col] /= num_points;
+#endif
+
+#if 1
+#define mask 0x3f
+#else
+#define mask 0x7
+#endif
+
+	det = determinate(s, mask, mask);
+	if (!det) {
+		printf("ts_calibrate: determinant is zero\n");
+		return -1;
+	}
+#ifdef DEBUG
+#ifdef USE_FLOAT
+	printf("input: det = " DFORMAT "\n", det);
+#else
+	printf("input: det = %lld (0x%llx)\n", det, det);
+#endif
+
+	for (row = 0; row < 6; row++) {
+		if (mask & (1 << row)) {
+			for (col = 0; col <= row; col++) {
+				if (mask & (1 << col)) {
+#ifdef USE_FLOAT
+					printf(FIXED_FORMAT " ", get_element(s, row, col));
+#else
+					printf("%016llx ", get_element(s, row, col));
+#endif
+				}
+			}
+			printf("\n");
+		}
+	}
+#endif
+
+	/* calculate inverse of matrix s */
+	for (row = 0; row < 6; row++) {
+		if (mask & (1 << row)) {
+			int neg = 0;
+			for (col = row; col < 6; col++) {
+				if (mask & (1 << col)) {
+					stype det1 = determinate(s, mask ^ (1 << row), mask ^(1 << col));
+
+					if (neg)
+						det1 = -det1;
+					d[row * 6 + col] = det1;
+					neg ^= 1;
+				}
+			}
+		}
+	}
+
+#ifdef DEBUG
+	printf("Adj\n");
+	for (row = 0; row < 6; row++) {
+		if (mask & (1 << row)) {
+			for (col = 0; col <= row; col++) {
+				if (mask & (1 << col)) {
+#ifdef USE_FLOAT
+					printf(FIXED_FORMAT " ", get_adj_element(d, row, col));
+#else
+					printf("%016llx ", get_adj_element(d, row, col));
+#endif
+				}
+			}
+			printf("\n");
+		}
+	}
+#endif
+
+	for (row = 0; row < 2; row ++) {
+		for (col = 0; col < 6; col++) {
+			if (mask & (1 << col)) {
+				stype sum = 0;
+				int w;
+				for (w = 0; w < 6; w++) {
+					if (mask & (1 << w))
+						sum += mull(get_adj_element(d, w, col), r[row][w]);
+				}
+#ifdef USE_FLOAT
+				sum /= det;
+				a[row][col] = (int)(sum * 65536);
+#ifdef DEBUG
+				printf("a=%d (" DFORMAT ")\n", a[row][col], sum);
+#endif
+#else
+				w = sum >> 47;
+				if (w && (w != -1))
+					printf("sum too big %lld\n", sum);
+				sum <<= 16;
+				a[row][col] = (s32)(sum / det);
+#ifdef DEBUG
+				printf("a=%d sum=%lld / %lld\n", a[row][col], sum, det);
+#endif
+#endif
+			}
+		}
+	}
+	res->a[0] = a[0][0];
+	res->a[1] = a[0][1];
+	res->a[2] = a[0][2];
+	res->a[3] = a[0][3];
+	res->a[4] = a[0][4];
+	res->a[5] = a[0][5];
+	res->a[6] = a[1][0];
+	res->a[7] = a[1][1];
+	res->a[8] = a[1][2];
+	res->a[9] = a[1][3];
+	res->a[10] = a[1][4];
+	res->a[11] = a[1][5];
+	res->shift = 16;
+	printf("x: %d, %d i, %d j, %d ij, %d i2, %d j2\n", a[0][0], a[0][1], a[0][2], a[0][3], a[0][4], a[0][5]);
+	printf("y: %d, %d i, %d j, %d ij, %d i2, %d j2\n", a[1][0], a[1][1], a[1][2], a[1][3], a[1][4], a[1][5]);
+	return 0;
+}
 
 #define DEBUG
 
@@ -450,7 +873,7 @@ or for us
 
 A ^ -1 = 1/|A|  | |_ij  _jj| |_ij  _ii| |_ii _ij| |
 		| |_i   _j | |_j   _i | |_ij _jj| |
-		|			 	  |
+		|				  |
 		| |_jj  _j|  |_i _ij|   |_ij _i|  |
 		| |_j    n|  | n _j |   |_jj _j|  |
 		|				  |
@@ -459,9 +882,9 @@ A ^ -1 = 1/|A|  | |_ij  _jj| |_ij  _ii| |_ii _ij| |
 
 or
 A ^ -1 = 1/|A|  | _ij*_j - _jj*_i,  _ij*_i - _ii*_j,  _ii*_jj - _ij*_ij	|
-		|			  	   			|
+		|			 	   			|
 		| n*_jj - _j*_j,    _i*_j - n*_ij,    _ij*_j - _i*_jj	|
-		|				   			|
+		|				  			|
 		| _j*_i - n*_ij,    n*_ii - _i*_i,   _i*_ij - _ii*_j	|
 */
 
@@ -493,7 +916,7 @@ int perform_calibration(struct cal_data *cal, int num_points, struct cal_result 
 	SXDECL(f, 5);
 	SXDECL(g, 7);
 	SXDECL(det, 9);
-	UXDECL(tmp, 10);
+//	UXDECL(tmp, 10);
 	UXDECL(stmp, 10);
 	UXDECL(idet, 10);
 	UXDECL(stmp2, 20);
@@ -576,9 +999,9 @@ int perform_calibration(struct cal_data *cal, int num_points, struct cal_result 
 
 /*
  * Get elements of inverse matrix
- * 	A ^ -1 = 1/|A|  | a(h) = _j*_ij - _i*_jj,  d(i) = _i*_ij - _j*_ii,  g = _ii*_jj - _ij*_ij	|
- * 			| b = n*_jj - _j*_j,       e(c) = _i*_j - n*_ij,    h(a) =  _j*_ij - _i*_jj	|
- * 			| c(e) = _i*_j - n*_ij,    f = n*_ii - _i*_i,       i(d) =  _i*_ij - _j*_ii	|
+ *	A ^ -1 = 1/|A|  | a(h) = _j*_ij - _i*_jj,  d(i) = _i*_ij - _j*_ii,  g = _ii*_jj - _ij*_ij	|
+ *			| b = n*_jj - _j*_j,       e(c) = _i*_j - n*_ij,    h(a) =  _j*_ij - _i*_jj	|
+ *			| c(e) = _i*_j - n*_ij,    f = n*_ii - _i*_i,       i(d) =  _i*_ij - _j*_ii	|
  */
 	xx_umul(n_ii, n, _ii);
 	xx_umul(n_ij, n, _ij);
@@ -708,18 +1131,18 @@ int perform_q_calibration(struct cal_data *cal,  struct cal_result *res)
 	int r;
 	struct cal_data c3[3];
 	r = perform_calibration(cal, 5, &res[QUAD_MAIN]);
-	c3[0] = cal[PT_CENTER];
-	c3[2] = cal[PT_RIGHT_TOP];
-	c3[1] = cal[PT_LEFT_TOP];
+	c3[0] = cal[PT_MM];
+	c3[2] = cal[PT_RT];
+	c3[1] = cal[PT_LT];
 	if (r >= 0)
 		r = perform_calibration(c3, 3, &res[QUAD_TOP]);
-	c3[2] = cal[PT_LEFT_BOTTOM];
+	c3[2] = cal[PT_LB];
 	if (r >= 0)
 		r = perform_calibration(c3, 3, &res[QUAD_LEFT]);
-	c3[1] = cal[PT_RIGHT_BOTTOM];
+	c3[1] = cal[PT_RB];
 	if (r >= 0)
 		r = perform_calibration(c3, 3, &res[QUAD_BOTTOM]);
-	c3[2] = cal[PT_RIGHT_TOP];
+	c3[2] = cal[PT_RT];
 	if (r >= 0)
 		r = perform_calibration(c3, 3, &res[QUAD_RIGHT]);
 	return r;
