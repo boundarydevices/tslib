@@ -200,6 +200,35 @@ int main()
 				printf("write returned %d, expected %d\n", ret, length);
 		}
 		close(cal_fd);
+
+		if (ngroups == 1) {
+			char *p = strncpy(cal_buffer, calfile, sizeof(cal_buffer) - 3);
+			int nleft;
+			int len;
+			p[sizeof(cal_buffer) - 3] = 0;
+			p += strlen(p);
+			*p++ = '_';
+			*p++ = 'c';
+			*p = 0;
+
+			cal_fd = open(cal_buffer, O_TRUNC | O_CREAT | O_RDWR, S_IRWXU | S_IRWXG | S_IRWXO);
+			printf("coefficient file: %s\n", cal_buffer);
+			p = cal_buffer;
+			nleft = sizeof(cal_buffer);
+			for (i = 0; i < nconst; i++) {
+				len = snprintf(p, nleft, (i != (nconst - 1)) ? "%d," : "%d\n", res[0].a[i]);
+
+				if (len >= nleft)
+					break;
+				nleft -= len;
+				p += len;
+			}
+			len = sizeof(cal_buffer) - nleft;
+			ret = write(cal_fd, cal_buffer, len);
+			if (ret < len)
+				printf("write returned %d, expected %d\n", ret, len);
+			close(cal_fd);
+		}
                 i = 0;
 	} else {
 		printf("Calibration failed.\n");
