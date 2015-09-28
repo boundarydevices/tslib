@@ -248,24 +248,26 @@ int get_linearq_settings(struct tslib_linear *lin, char *p)
 			char *pend;
 			p = (char *)past_delim(p, delim_array, sizeof(delim_array));
 			if (!*p) {
-				if ((q == 5) && (index = 0))
-					break;
-				printf("Error, not enough numbers\n");
+				printf("Error, not enough numbers (%d, %d)\n", q, index);
 				return -1;
 			}
 			(&cal[q].x)[index] = strtol(p, &pend, 10);
 			p = pend;
 		}
+		p = (char *)past_delim(p, delim_array, sizeof(delim_array));
+		if (!*p)
+			break;
 	}
-	lin->ncoeffs = (q == 5) ? 6 : 12;
-	lin->nregions = (q == 5) ? 5 : 1;
+	if (q < 3) {
+		printf("Error, not enough points (%d)\n", q);
+		return -1;
+	}
+	lin->ncoeffs = 12;
+	lin->nregions = 1;
 
 	lin->xMax = cal[PT_MM].x * 2;
 	lin->yMax = cal[PT_MM].y * 2;
-	if (q == 5)
-		r = perform_q_calibration(cal, lin->res);
-	else
-		r = perform_n_point_calibration(cal, q, lin->xMax, lin->yMax,
+	r = perform_n_point_calibration(cal, q, lin->xMax, lin->yMax,
 				lin->iMax, lin->jMax, lin->res);
 #ifdef DEBUG
 	printf("xMax=%d yMax=%d\n", lin->xMax, lin->yMax);

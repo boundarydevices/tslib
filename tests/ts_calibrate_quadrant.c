@@ -22,6 +22,7 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/time.h>
+#include <getopt.h>
 #include <linux/kd.h>
 #include <linux/vt.h>
 #include <linux/fb.h>
@@ -80,25 +81,70 @@ static void get_sample (struct tsdev *ts, struct cal_data *cal,
 	printf("%s : X = %4d Y = %4d\n", name, cal->i, cal->j);
 }
 
-int main()
+struct opts {
+	int xinput_format;
+};
+
+void print_usage(void)
+{
+	printf("Usage: ts_calibrate_quadrant [OPTIONS...]\n"
+		"Where OPTIONS are\n"
+		"   -h --help		Show this help\n"
+		"   -x --xinput		xinput output format\n"
+		"\n");
+}
+
+int parse_opts(int argc, char * const *argv, struct opts *opts)
+{
+	int c;
+
+	static struct option long_options[] = {
+		{"help",	no_argument, 		0, 'h' },
+		{"xinput",	no_argument, 		0, 'x' },
+		{0,		0,			0, 0 },
+	};
+
+	while ((c = getopt_long(argc, argv, "+hx", long_options, NULL)) != -1) {
+		switch (c)
+		{
+		case 'h':
+		case '?':
+			print_usage();
+			return -1;
+		case 'x':
+			opts->xinput_format = 1;
+			break;
+		}
+	}
+	return 0;
+}
+
+int main(int argc, char * const argv[])
 {
 	struct tsdev *ts;
 	struct cal_data cal[9];
 	struct cal_result res[5];
 	int cal_fd;
 	char cal_buffer[256];
+	char device_name[260];
 	char *tsdevice = NULL;
 	char *calfile = NULL;
 	unsigned int i;
 	int r;
-	int r1;
 	int dx, dy;
 	unsigned nconst = 6;
 	unsigned ngroups = 5;
-	unsigned npoints = 5;
+	unsigned npoints;
 	struct input_absinfo abs;
 	int iMax = 2048;
 	int jMax = 2048;
+	struct opts opts;
+	int err;
+
+	memset(&opts, 0, sizeof(struct opts));
+	err = parse_opts(argc, argv, &opts);
+	if (err)
+		exit(1);
 
 	signal(SIGSEGV, sig);
 	signal(SIGINT, sig);
@@ -118,6 +164,27 @@ int main()
 	if (ts_config(ts)) {
 		perror("ts_config");
 		exit(1);
+	}
+
+	if (ioctl(ts->fd, EVIOCGABS(0), &abs) == 0) {
+		iMax = abs.maximum + 1;
+		printf("iMax = %d\n", iMax);
+	} else {
+		printf("iMax read error, defaulting to 2048\n");
+	}
+	if (ioctl(ts->fd, EVIOCGABS(1), &abs) == 0) {
+		jMax = abs.maximum + 1;
+		printf("jMax = %d\n", jMax);
+	} else {
+		printf("jMax read error, defaulting to 2048\n");
+	}
+	i = ioctl(ts->fd, EVIOCGNAME(256), device_name);
+	if (i > 0) {
+		device_name[i] = 0;
+		printf("device_name = %s\n", device_name);
+	} else {
+		printf("device_name read error\n");
+		device_name[0] = 0;
 	}
 
 	/* get xres, yres */
@@ -141,43 +208,36 @@ int main()
 
 	dy = 50;
 	dx = (dy * xres) / yres;
-	get_sample(ts, &cal[PT_LT], dx,            dy,            "left top");
-	get_sample(ts, &cal[PT_MT], xres / 2,      dy,            "mid top ");
-	get_sample(ts, &cal[PT_RT], xres - 1 - dx, dy,            "right top");
+	npoints = opts.xinput_format ? 5 : 9;
 
-	get_sample(ts, &cal[PT_LM], dx,            yres / 2,      "left mid");
-	get_sample(ts, &cal[PT_MM], xres / 2,      yres / 2,      "Center");
-	get_sample(ts, &cal[PT_RM], xres - 1 - dx, yres / 2,      "right mid");
+	if (PT_LT < npoints)
+		get_sample(ts, &cal[PT_LT], dx,            dy,            "left top");
+	if (PT_MT < npoints)
+		get_sample(ts, &cal[PT_MT], xres / 2,      dy,            "mid top ");
+	if (PT_RT < npoints)
+		get_sample(ts, &cal[PT_RT], xres - 1 - dx, dy,            "right top");
 
-	get_sample(ts, &cal[PT_LB], dx,            yres - 1 - dy, "left bottom");
-	get_sample(ts, &cal[PT_MB], xres / 2,      yres - 1 - dy, "mid bottom");
-	get_sample(ts, &cal[PT_RB], xres - 1 - dx, yres - 1 - dy, "right bottom");
+	if (PT_LM < npoints)
+		get_sample(ts, &cal[PT_LM], dx,            yres / 2,      "left mid");
+	if (PT_MM < npoints)
+		get_sample(ts, &cal[PT_MM], xres / 2,      yres / 2,      "Center");
+	if (PT_RM < npoints)
+		get_sample(ts, &cal[PT_RM], xres - 1 - dx, yres / 2,      "right mid");
 
-	if (ioctl(ts->fd, EVIOCGABS(0), &abs) == 0) {
-		iMax = abs.maximum + 1;
-		printf("iMax = %d\n", iMax);
-	} else {
-		printf("iMax read error, defaulting to 2048\n");
-	}
-	if (ioctl(ts->fd, EVIOCGABS(1), &abs) == 0) {
-		jMax = abs.maximum + 1;
-		printf("jMax = %d\n", jMax);
-	} else {
-		printf("jMax read error, defaulting to 2048\n");
-	}
+	if (PT_LB < npoints)
+		get_sample(ts, &cal[PT_LB], dx,            yres - 1 - dy, "left bottom");
+	if (PT_MB < npoints)
+		get_sample(ts, &cal[PT_MB], xres / 2,      yres - 1 - dy, "mid bottom");
+	if (PT_RB < npoints)
+		get_sample(ts, &cal[PT_RB], xres - 1 - dx, yres - 1 - dy, "right bottom");
 
-	r = perform_q_calibration(cal, res);
-	r1 = perform_n_point_calibration(cal, 9, xres, yres, iMax, jMax, res);
-	if (r >= 0) {
-		r = r1;
-		nconst = 12;
-		ngroups = 1;
-		npoints = 9;
-	}
-
+	r = perform_n_point_calibration(cal, npoints, xres, yres, iMax, jMax, res);
 	if (r >= 0) {
 		int ret;
 		unsigned q;
+
+		nconst = 12;
+		ngroups = 1;
 
 		printf ("Calibration constants: ");
 		for (q = 0; q < ngroups; q++) {
@@ -208,20 +268,38 @@ int main()
 			p[sizeof(cal_buffer) - 3] = 0;
 			p += strlen(p);
 			*p++ = '_';
-			*p++ = 'c';
+			*p++ = opts.xinput_format ? 'x' : 'c';
 			*p = 0;
 
 			cal_fd = open(cal_buffer, O_TRUNC | O_CREAT | O_RDWR, S_IRWXU | S_IRWXG | S_IRWXO);
 			printf("coefficient file: %s\n", cal_buffer);
 			p = cal_buffer;
 			nleft = sizeof(cal_buffer);
-			for (i = 0; i < nconst; i++) {
-				len = snprintf(p, nleft, (i != (nconst - 1)) ? "%d," : "%d\n", res[0].a[i]);
+			if (opts.xinput_format) {
+				float f[6];
 
-				if (len >= nleft)
-					break;
-				nleft -= len;
-				p += len;
+				f[2] = (float)res[0].a[0] / 65536;
+				f[0] = (float)res[0].a[1] / 65536;
+				f[1] = (float)res[0].a[2] / 65536;
+				f[5] = (float)res[0].a[6] / 65536;
+				f[3] = (float)res[0].a[7] / 65536;
+				f[4] = (float)res[0].a[8] / 65536;
+				len = snprintf(p, nleft, "\"%s\" \"Coordinate Transformation Matrix\" "
+						"%.5f %.5f %.5f %.5f %.5f %.5f 0 0 1\n",
+						device_name, f[0], f[1], f[2], f[3], f[4], f[5]);
+				if (nleft > len) {
+					nleft -= len;
+					p += len;
+				}
+			} else {
+				for (i = 0; i < nconst; i++) {
+					len = snprintf(p, nleft, (i != (nconst - 1)) ? "%d," : "%d\n", res[0].a[i]);
+
+					if (len >= nleft)
+						break;
+					nleft -= len;
+					p += len;
+				}
 			}
 			len = sizeof(cal_buffer) - nleft;
 			ret = write(cal_fd, cal_buffer, len);
