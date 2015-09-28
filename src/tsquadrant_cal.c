@@ -45,16 +45,10 @@ Numbers by i or j mean ** (squared or cubed or 4th power)
 (A)-1 = 1/det(A) * adj(A)
 adj(A)ij = (-1)**(i+j) det(minor_ji(A))
  */
-#define USE_FLOAT
-#ifdef USE_FLOAT
 #define utype long double
 #define stype long double
-#define DFORMAT "%Lf"
-#define FIXED_FORMAT "%016Lf"
-#else
-#define utype u64
-#define stype s64
-#endif
+#define DFORMAT "%20.10Lf"
+#define FIXED_FORMAT "%20.10Lf"
 
 /* Symmetrical matrix, only half filled in */
 static utype get_element(utype *s, unsigned row, unsigned col)
@@ -74,81 +68,7 @@ static stype get_adj_element(stype *d, unsigned row, unsigned col)
 
 static stype mull(stype m, utype e)
 {
-#ifdef USE_FLOAT
 	return m * e;
-#else
-	u32 mh, ml, eh, el;
-	u32 sign = (m < 0) ? ~0 : 0;
-	u32 s[4];
-	u64 t;
-	u32 v;
-	u32 sign2;
-
-	if (sign)
-		m = -m;
-
-	mh = m >> 32;
-	ml = (m & 0xffffffff);
-	eh = e >> 32;
-	el = (e & 0xffffffff);
-
-	t = ml * (u64)el;
-	s[0] = (u32)t;
-	s[1] = t >> 32;
-	s[2] = 0;
-	s[3] = 0;
-
-	t = ml * (u64)eh;
-	v = (u32)t;
-	s[1] += v;
-	if (s[1] < v)
-		s[2]++;
-	v = t >> 32;
-	s[2] += v;
-	if (s[2] < v)
-		s[3]++;
-
-	t = mh * (u64)el;
-	v = (u32)t;
-	s[1] += v;
-	if (s[1] < v)
-		s[2]++;
-	v = t >> 32;
-	s[2] += v;
-	if (s[2] < v)
-		s[3]++;
-
-	t = mh * (u64)eh;
-	v = (u32)t;
-	s[2] += v;
-	if (s[2] < v)
-		s[3]++;
-	v = t >> 32;
-	s[3] += v;
-
-
-	if (sign) {
-		s[0] = ~s[0];
-		s[1] = ~s[1];
-		s[2] = ~s[2];
-		s[3] = ~s[3];
-		s[0]++;
-		if (!s[0]) {
-			s[1]++;
-			if (!s[1]) {
-				s[2]++;
-				if (!s[2]) {
-					s[3]++;
-				}
-			}
-		}
-	}
-	sign2 = (s[2] >> 31) ? ~0: 0;
-	if ((sign != sign2) || (sign != s[3]))
-		printf("%s: overflow %d %llx %llx\n", __func__, s[3], m, e);
-
-	return (((s64)s[2]) << 32) | s[1];
-#endif
 }
 
 static stype determinate(utype *s, unsigned row_mask, unsigned col_mask)
@@ -168,16 +88,8 @@ static stype determinate(utype *s, unsigned row_mask, unsigned col_mask)
 			stype m = determinate(s, r_mask, c_mask);
 			utype e = get_element(s, row, col);
 
-#ifndef USE_FLOAT
-			if (e > (1ULL << 32))
-				printf("!!!%s: e (%llx) too big\n", __func__, e);
-#endif
 #ifdef DEBUG
-#ifdef USE_FLOAT
 //			printf("%s: m = " DFORMAT " e= " DFORMAT "\n", __func__, m, e);
-#else
-//			printf("%s: m = 0x%llx e=0x%llx\n", __func__, m, e);
-#endif
 #endif
 			m = mull(m, e);
 			if (neg)
@@ -188,29 +100,17 @@ static stype determinate(utype *s, unsigned row_mask, unsigned col_mask)
 		col++;
 	}
 #ifdef DEBUG
-#ifdef USE_FLOAT
 //	printf("%s: det = " DFORMAT "\n", __func__, det);
-#else
-//	printf("%s: det = 0x%llx\n", __func__, det);
-#endif
 #endif
 	return det;
 }
 
 utype cval(u32 n) {
-#ifdef USE_FLOAT
 	return (utype)n;
-#else
-	return (utype)n << 32;
-#endif
 }
 
 utype mval(utype a, utype b) {
-#ifdef USE_FLOAT
 	return a * b;
-#else
-	return (a * b) >> 32;
-#endif
 }
 
 TSAPI extern int perform_n_point_calibration(struct cal_data *cal,
@@ -225,6 +125,7 @@ TSAPI extern int perform_n_point_calibration(struct cal_data *cal,
 	unsigned col;
 	stype det;
 	int p;
+	unsigned mask = 0x3f;
 
 	printf("xmax=%d, ymax=%d imax=%d, jmax=%d\n", xmax, ymax, imax, jmax);
 
@@ -243,11 +144,6 @@ TSAPI extern int perform_n_point_calibration(struct cal_data *cal,
 		utype ij = mval(i, j);
 		utype i2 = mval(i, i);
 		utype j2 = mval(j, j);
-
-#ifndef USE_FLOAT
-		if ((x | y | i | j) >= (1ULL << 32))
-			printf("!!!x=%d y=%d i=%d j=%d\n", d->x, d->y, d->i, d->j);
-#endif
 
 		r[0][0] += x;
 		r[0][1] += mval(x, i);
@@ -299,44 +195,22 @@ TSAPI extern int perform_n_point_calibration(struct cal_data *cal,
 	s[1 * 6 + 5] = s[2 * 6 + 3];	/* ij2 */
 	s[4 * 6 + 5] = s[3 * 6 + 3];	/* i2j2 */
 
-#ifndef USE_FLOAT
-	/* Now average all the values */
-	for (row = 0; row < 2; row ++)
-		for (col = 0; col < 6; col ++)
-			r[row][col] /= num_points;
-
-	for (row = 0; row < 6; row ++)
-		for (col = row; col < 6; col ++)
-			s[row * 6 + col] /= num_points;
-#endif
-
-#if 1
-#define mask 0x3f
-#else
-#define mask 0x7
-#endif
+	if (num_points < 6)
+		mask &= 0x7;
 
 	det = determinate(s, mask, mask);
-	if (!det) {
-		printf("ts_calibrate: determinant is zero\n");
+	if ((det > -.000000001) && (det < .000000001)) {
+		printf("ts_calibrate: determinant is " DFORMAT "\n", det);
 		return -1;
 	}
 #ifdef DEBUG
-#ifdef USE_FLOAT
 	printf("input: det = " DFORMAT "\n", det);
-#else
-	printf("input: det = %lld (0x%llx)\n", det, det);
-#endif
 
 	for (row = 0; row < 6; row++) {
 		if (mask & (1 << row)) {
 			for (col = 0; col <= row; col++) {
 				if (mask & (1 << col)) {
-#ifdef USE_FLOAT
 					printf(FIXED_FORMAT " ", get_element(s, row, col));
-#else
-					printf("%016llx ", get_element(s, row, col));
-#endif
 				}
 			}
 			printf("\n");
@@ -367,11 +241,7 @@ TSAPI extern int perform_n_point_calibration(struct cal_data *cal,
 		if (mask & (1 << row)) {
 			for (col = 0; col <= row; col++) {
 				if (mask & (1 << col)) {
-#ifdef USE_FLOAT
 					printf(FIXED_FORMAT " ", get_adj_element(d, row, col));
-#else
-					printf("%016llx ", get_adj_element(d, row, col));
-#endif
 				}
 			}
 			printf("\n");
@@ -388,21 +258,10 @@ TSAPI extern int perform_n_point_calibration(struct cal_data *cal,
 					if (mask & (1 << w))
 						sum += mull(get_adj_element(d, w, col), r[row][w]);
 				}
-#ifdef USE_FLOAT
 				sum /= det;
 				a[row][col] = (int)(sum * 65536);
 #ifdef DEBUG
 				printf("a=%d (" DFORMAT ")\n", a[row][col], sum);
-#endif
-#else
-				w = sum >> 47;
-				if (w && (w != -1))
-					printf("sum too big %lld\n", sum);
-				sum <<= 16;
-				a[row][col] = (s32)(sum / det);
-#ifdef DEBUG
-				printf("a=%d sum=%lld / %lld\n", a[row][col], sum, det);
-#endif
 #endif
 			}
 		}
