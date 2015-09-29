@@ -91,6 +91,7 @@ void print_usage(void)
 		"Where OPTIONS are\n"
 		"   -h --help		Show this help\n"
 		"   -x --xinput		xinput output format\n"
+		"   -r --rotate180	screen is upside down\n"
 		"\n");
 }
 
@@ -104,7 +105,7 @@ int parse_opts(int argc, char * const *argv, struct opts *opts)
 		{0,		0,			0, 0 },
 	};
 
-	while ((c = getopt_long(argc, argv, "+hx", long_options, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "+hxr", long_options, NULL)) != -1) {
 		switch (c)
 		{
 		case 'h':
@@ -113,6 +114,9 @@ int parse_opts(int argc, char * const *argv, struct opts *opts)
 			return -1;
 		case 'x':
 			opts->xinput_format = 1;
+			break;
+		case 'r':
+			rotate180 = 1;
 			break;
 		}
 	}

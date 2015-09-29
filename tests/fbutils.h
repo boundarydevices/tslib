@@ -21,7 +21,7 @@
  */
 #define XORMODE	0x80000000
 
-extern __u32 xres, yres;
+extern __u32 xres, yres, rotate180;
 
 int open_framebuffer(void);
 void close_framebuffer(void);

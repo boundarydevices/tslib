@@ -42,7 +42,7 @@ static unsigned char **line_addr;
 static int fb_fd=0;
 static int bytes_per_pixel;
 static unsigned colormap [256];
-__u32 xres, yres;
+__u32 xres, yres, rotate180;
 
 static char *defaultfbdevice = "/dev/fb0";
 static char *defaultconsoledevice = "/dev/tty";
@@ -317,7 +317,10 @@ void pixel (int x, int y, unsigned colidx)
 	}
 #endif
 
-	loc.p8 = line_addr [y] + x * bytes_per_pixel;
+	if (rotate180)
+		loc.p8 = line_addr [yres - y] + (xres - x) * bytes_per_pixel;
+	else
+		loc.p8 = line_addr [y] + x * bytes_per_pixel;
 	__setpixel (loc, xormode, colormap [colidx]);
 }
 
