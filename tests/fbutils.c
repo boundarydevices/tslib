@@ -318,7 +318,7 @@ void pixel (int x, int y, unsigned colidx)
 #endif
 
 	if (rotate180)
-		loc.p8 = line_addr [yres - y] + (xres - x) * bytes_per_pixel;
+		loc.p8 = line_addr [yres - y - 1] + (xres - x - 1) * bytes_per_pixel;
 	else
 		loc.p8 = line_addr [y] + x * bytes_per_pixel;
 	__setpixel (loc, xormode, colormap [colidx]);
