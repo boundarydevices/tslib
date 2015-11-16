@@ -131,7 +131,6 @@ int main(int argc, char * const argv[])
 	int cal_fd;
 	char cal_buffer[256];
 	char device_name[260];
-	char *tsdevice = NULL;
 	char *calfile = NULL;
 	unsigned int i;
 	int r;
@@ -154,19 +153,9 @@ int main(int argc, char * const argv[])
 	signal(SIGINT, sig);
 	signal(SIGTERM, sig);
 
-	if( (tsdevice = getenv("TSLIB_TSDEVICE")) != NULL ) {
-		ts = ts_open(tsdevice,0);
-	} else {
-		if (!(ts = ts_open("/dev/input/event0", 0)))
-			ts = ts_open("/dev/touchscreen/ucb1x00", 0);
-	}
-
+	ts = ts_open_config(0);
 	if (!ts) {
-		perror("ts_open");
-		exit(1);
-	}
-	if (ts_config(ts)) {
-		perror("ts_config");
+		perror("ts_open_config");
 		exit(1);
 	}
 
