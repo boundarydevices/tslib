@@ -17,10 +17,12 @@
 #include <stdint.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
 #include <fcntl.h>
 
 #include <stdio.h>
+#include <linux/input.h>
 
 #include "config.h"
 #include "tslib-private.h"
@@ -35,20 +37,72 @@ struct tslib_linear {
 	int	p_mult;
 	int	p_div;
 
+	int	xMax;
+	int	yMax;
+	int	iMax;
+	int	jMax;
 // Linear scaling and offset parameters for x,y (can include rotation)
-	int	a[7];
-
-// Screen resolution at the time when calibration was performed
-	unsigned int cal_res_x;
-	unsigned int cal_res_y;
+	int	a[12];
 };
+
+#define u64 unsigned long long
+#define s32 int
+#define u32 unsigned int
+#define s64 long long
+
+static void transform6(struct tslib_linear *lin, struct ts_sample *samp)
+{
+	u32 s[6];
+	s64 xsum, ysum;
+	s32 cx, cy;
+	int xMax = lin->xMax;
+	int yMax = lin->yMax;
+	int i;
+
+#ifdef DEBUG
+	fprintf(stderr,"BEFORE CALIB--------------------> %d %d %d\n",samp->x, samp->y, samp->pressure);
+#endif /*DEBUG*/
+
+	cx = samp->x;
+	cy = samp->y;
+	if ((cx >= lin->iMax) || (cy >= lin->jMax))
+		printf("!!!%s:i=%d imax=%d, j=%d jmax=%d\n", __func__,
+				cx, lin->iMax, cy, lin->jMax);
+	s[0] = 1 << 16;
+	s[1] = (cx << 16) / lin->iMax;
+	s[2] = (cy << 16) / lin->jMax;
+	s[3] = (s[1] * s[2]) >> 16;
+	s[4] = (s[1] * s[1]) >> 16;
+	s[5] = (s[2] * s[2]) >> 16;
+
+	xsum = 0;
+	ysum = 0;
+	for (i = 0; i < 6 ; i++) {
+		xsum += (lin->a[i] * (s64)s[i]);
+		ysum += (lin->a[i + 6] * (s64)s[i]);
+	}
+	cx = (s32)((xsum * xMax) >> 32);
+	cy = (s32)((ysum * yMax) >> 32);
+	if (cx < 0)
+		cx = 0;
+	if (cy < 0)
+		cy = 0;
+	if (cx >= xMax)
+		cx = xMax - 1;
+	if (cy >= yMax)
+		cy = yMax - 1;
+#ifdef DEBUG
+	printf("%s: max(%d,%d) (%d,%d)->(%d,%d)\n", __func__, xMax, yMax, samp->x, samp->y, cx, cy);
+#endif
+	samp->x = cx;
+	samp->y = cy;
+}
 
 static int
 linear_read(struct tslib_module_info *info, struct ts_sample *samp, int nr)
 {
 	struct tslib_linear *lin = (struct tslib_linear *)info;
 	int ret;
-	int xtemp,ytemp;
 
 	ret = info->next->ops->read(info->next, samp, nr);
 	if (ret >= 0) {
@@ -58,17 +112,7 @@ linear_read(struct tslib_module_info *info, struct ts_sample *samp, int nr)
 #ifdef DEBUG
 			fprintf(stderr,"BEFORE CALIB--------------------> %d %d %d\n",samp->x, samp->y, samp->pressure);
 #endif /*DEBUG*/
-			xtemp = samp->x; ytemp = samp->y;
-			samp->x = 	( lin->a[2] +
-					lin->a[0]*xtemp + 
-					lin->a[1]*ytemp ) / lin->a[6];
-			samp->y =	( lin->a[5] +
-					lin->a[3]*xtemp +
-					lin->a[4]*ytemp ) / lin->a[6];
-			if (info->dev->res_x && lin->cal_res_x)
-				samp->x = samp->x * info->dev->res_x / lin->cal_res_x;
-			if (info->dev->res_y && lin->cal_res_y)
-				samp->y = samp->y * info->dev->res_y / lin->cal_res_y;
+			transform6(lin, samp);
 
 			samp->pressure = ((samp->pressure + lin->p_offset)
 						 * lin->p_mult) / lin->p_div;
@@ -150,7 +194,7 @@ static const struct tslib_vars linear_vars[] =
 
 #define NR_VARS (sizeof(linear_vars) / sizeof(linear_vars[0]))
 
-TSAPI struct tslib_module_info *linear_mod_init(struct tsdev *dev, const char *params)
+TSAPI struct tslib_module_info *linear_mod_init(struct tsdev *ts, const char *params)
 {
 
 	struct tslib_linear *lin;
@@ -158,6 +202,7 @@ TSAPI struct tslib_module_info *linear_mod_init(struct tsdev *dev, const char *p
 	FILE *pcal_fd;
 	int index;
 	char *calfile;
+	struct input_absinfo abs;
 
 	lin = malloc(sizeof(struct tslib_linear));
 	if (lin == NULL)
@@ -166,30 +211,49 @@ TSAPI struct tslib_module_info *linear_mod_init(struct tsdev *dev, const char *p
 	lin->module.ops = &linear_ops;
 
 // Use default values that leave ts numbers unchanged after transform
-	lin->a[0] = 1;
+	lin->a[0] = 65536;
 	lin->a[1] = 0;
 	lin->a[2] = 0;
 	lin->a[3] = 0;
-	lin->a[4] = 1;
+	lin->a[4] = 0;
 	lin->a[5] = 0;
-	lin->a[6] = 1;
+
+	lin->a[6] = 0;
+	lin->a[7] = 65536;
+	lin->a[8] = 0;
+	lin->a[9] = 0;
+	lin->a[10] = 0;
+	lin->a[11] = 0;
 	lin->p_offset = 0;
 	lin->p_mult   = 1;
 	lin->p_div    = 1;
 	lin->swap_xy  = 0;
+	lin->xMax = ts->xres;
+	lin->yMax = ts->yres;
 
+	if (ioctl(ts->fd, EVIOCGABS(0), &abs) == 0) {
+		lin->iMax = abs.maximum + 1;
+		printf("iMax = %d\n", lin->iMax);
+	} else {
+		printf("iMax read error, defaulting to 2048\n");
+	}
+	if (ioctl(ts->fd, EVIOCGABS(1), &abs) == 0) {
+		lin->jMax = abs.maximum + 1;
+		printf("jMax = %d\n", lin->jMax);
+	} else {
+		printf("jMax read error, defaulting to 2048\n");
+	}
 	/*
 	 * Check calibration file
 	 */
 	if( (calfile = getenv("TSLIB_CALIBFILE")) == NULL) calfile = TS_POINTERCAL;
 	if (stat(calfile, &sbuf)==0) {
 		pcal_fd = fopen(calfile, "r");
-		for (index = 0; index < 7; index++)
+		for (index = 0; index < 12; index++)
 			if (fscanf(pcal_fd, "%d", &lin->a[index]) != 1) break;
-		fscanf(pcal_fd, "%d %d", &lin->cal_res_x, &lin->cal_res_y);
 #ifdef DEBUG
 		printf("Linear calibration constants: ");
-		for(index=0;index<7;index++) printf("%d ",lin->a[index]);
+		for (index = 0; index < 12; index++) printf("%d ",lin->a[index]);
 		printf("\n");
 #endif /*DEBUG*/
 		fclose(pcal_fd);
