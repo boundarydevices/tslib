@@ -27,6 +27,7 @@
 
 #include "font.h"
 #include "fbutils.h"
+#include "tslib-private.h"
 
 union multiptr {
 	unsigned char *p8;
@@ -42,7 +43,7 @@ static unsigned char **line_addr;
 static int fb_fd=0;
 static int bytes_per_pixel;
 static unsigned colormap [256];
-__u32 xres, yres;
+__u32 xres, yres, rotate180;
 
 static char *defaultfbdevice = "/dev/fb0";
 static char *defaultconsoledevice = "/dev/tty";
@@ -128,6 +129,7 @@ int open_framebuffer(void)
 	}
 	xres = var.xres;
 	yres = var.yres;
+
 
 	fbuffer = mmap(NULL, fix.smem_len, PROT_READ | PROT_WRITE, MAP_FILE | MAP_SHARED, fb_fd, 0);
 	if (fbuffer == (unsigned char *)-1) {
@@ -317,7 +319,10 @@ void pixel (int x, int y, unsigned colidx)
 	}
 #endif
 
-	loc.p8 = line_addr [y] + x * bytes_per_pixel;
+	if (rotate180)
+		loc.p8 = line_addr [yres - y - 1] + (xres - x - 1) * bytes_per_pixel;
+	else
+		loc.p8 = line_addr [y] + x * bytes_per_pixel;
 	__setpixel (loc, xormode, colormap [colidx]);
 }
 

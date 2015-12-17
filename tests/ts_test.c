@@ -19,6 +19,7 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/time.h>
+#include <getopt.h>
 
 #include "tslib.h"
 #include "fbutils.h"
@@ -105,13 +106,59 @@ static void refresh_screen ()
 		button_draw (&buttons [i]);
 }
 
-int main()
+struct opts {
+	int rotate180;
+};
+
+void print_usage(void)
+{
+	printf("Usage: ts_calibrate [OPTIONS...]\n"
+		"Where OPTIONS are\n"
+		"   -h --help		Show this help\n"
+		"   -r --rotate180	screen is upside down\n"
+		"\n");
+}
+
+int parse_opts(int argc, char * const *argv, struct opts *opts)
+{
+	int c;
+
+	static struct option long_options[] = {
+		{"help",	no_argument, 		0, 'h' },
+		{"rotate180",	no_argument, 		0, 'r' },
+		{0,		0,			0, 0 },
+	};
+
+	while ((c = getopt_long(argc, argv, "+hr", long_options, NULL)) != -1) {
+		switch (c)
+		{
+		case 'h':
+		case '?':
+			print_usage();
+			return -1;
+		case 'r':
+			opts->rotate180 = 1;
+			break;
+		}
+	}
+	return 0;
+}
+
+int main(int argc, char * const argv[])
 {
 	struct tsdev *ts;
 	int x, y;
 	unsigned int i;
 	unsigned int mode = 0;
 	int quit_pressed = 0;
+	struct opts opts;
+	int err;
+
+	memset(&opts, 0, sizeof(struct opts));
+	err = parse_opts(argc, argv, &opts);
+	if (err)
+		exit(1);
+	rotate180 = opts.rotate180;
 
 	signal(SIGSEGV, sig);
 	signal(SIGINT, sig);

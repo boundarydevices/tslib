@@ -21,8 +21,9 @@
  */
 #define XORMODE	0x80000000
 
-extern __u32 xres, yres;
+extern __u32 xres, yres, rotate180;
 
+struct tsdev;
 int open_framebuffer(void);
 void close_framebuffer(void);
 void setcolor(unsigned colidx, unsigned value);
