@@ -87,6 +87,11 @@ TSAPI int ts_load_module(struct tsdev *, const char *mod, const char *params);
 TSAPI struct tsdev *ts_open(const char *dev_name, int nonblock);
 
 /*
+ * Open the touchscreen device.
+ */
+TSAPI struct tsdev *ts_open_config(int nonblock, int xres, int yres);
+
+/*
  * Return a scaled touchscreen sample.
  */
 TSAPI int ts_read(struct tsdev *, struct ts_sample *, int);
