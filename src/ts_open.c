@@ -24,7 +24,7 @@
 
 extern struct tslib_module_info __ts_raw;
 
-struct tsdev *ts_open(const char *name, int nonblock)
+struct tsdev *ts_open(const char *name, int nonblock, int xres, int yres)
 {
 	struct tsdev *ts;
 	int flags = O_RDWR;
@@ -35,7 +35,10 @@ struct tsdev *ts_open(const char *name, int nonblock)
 	ts = malloc(sizeof(struct tsdev));
 	if (ts) {
 		memset(ts, 0, sizeof(struct tsdev));
+		ts->xres = xres;
+		ts->yres = yres;
 
+		printf("%s:screen resolution = %dx%d\n", __func__, ts->xres, ts->yres);
 		ts->fd = open(name, flags);
 		/*
 		 * Try again in case file is simply not writable
@@ -100,13 +103,11 @@ struct tsdev *ts_open_config(int nonblock, int xres, int yres)
 
 	p = getenv("TSLIB_TSDEVICE");
 	if (p) {
-		ts = ts_open(p, nonblock);
+		ts = ts_open(p, nonblock, xres, yres);
 		if (!ts) {
 			perror("ts_open");
 			return ts;
 		}
-		ts->xres = xres;
-		ts->yres = yres;
 		if (ts_config(ts)) {
 			perror("ts_config");
 			ts_close(ts);
@@ -122,11 +123,9 @@ struct tsdev *ts_open_config(int nonblock, int xres, int yres)
 			perror("ts_open");
 			return NULL;
 		}
-		ts = ts_open(p, nonblock);
+		ts = ts_open(p, nonblock, xres, yres);
 		if (!ts)
 			continue;
-		ts->xres = xres;
-		ts->yres = yres;
 		if (is_touchscreen(ts)) {
 			if (!ts_config(ts))
 				break;
