@@ -18,27 +18,21 @@
 #include <sys/time.h>
 
 #include "tslib.h"
+#include "fbutils.h"
 
 
 int main()
 {
 	struct tsdev *ts;
-	char *tsdevice=NULL;
 
-	if( (tsdevice = getenv("TSLIB_TSDEVICE")) != NULL ) {
-		ts = ts_open(tsdevice,0);
-	} else {
-		if (!(ts = ts_open("/dev/input/event0", 0)))
-			ts = ts_open("/dev/touchscreen/ucb1x00", 0);
-	}
-
-	if (!ts) {
-		perror("ts_open");
+	if (open_framebuffer()) {
+		close_framebuffer();
 		exit(1);
 	}
-
-	if (ts_config(ts)) {
-		perror("ts_config");
+	close_framebuffer();
+	ts = ts_open_config(0, xres, yres);
+	if (!ts) {
+		perror("ts_open_config");
 		exit(1);
 	}
 

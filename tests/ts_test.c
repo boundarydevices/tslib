@@ -117,14 +117,15 @@ int main()
 	signal(SIGINT, sig);
 	signal(SIGTERM, sig);
 
-	ts = ts_open_config(0);
-	if (!ts) {
-		perror("ts_open_config");
+	/* get xres, yres */
+	if (open_framebuffer()) {
+		close_framebuffer();
 		exit(1);
 	}
 
-	if (open_framebuffer()) {
-		close_framebuffer();
+	ts = ts_open_config(0, xres, yres);
+	if (!ts) {
+		perror("ts_open_config");
 		exit(1);
 	}
 

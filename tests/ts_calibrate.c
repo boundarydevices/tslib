@@ -193,7 +193,6 @@ int main()
 	calibration cal;
 	int cal_fd;
 	char cal_buffer[256];
-	char *tsdevice = NULL;
 	char *calfile = NULL;
 	unsigned int i, len;
 
@@ -201,24 +200,14 @@ int main()
 	signal(SIGINT, sig);
 	signal(SIGTERM, sig);
 
-	if( (tsdevice = getenv("TSLIB_TSDEVICE")) != NULL ) {
-		ts = ts_open(tsdevice,0);
-	} else {
-		if (!(ts = ts_open("/dev/input/event0", 0)))
-			ts = ts_open("/dev/touchscreen/ucb1x00", 0);
-	}
-
-	if (!ts) {
-		perror("ts_open");
-		exit(1);
-	}
-	if (ts_config(ts)) {
-		perror("ts_config");
-		exit(1);
-	}
-
 	if (open_framebuffer()) {
 		close_framebuffer();
+		exit(1);
+	}
+
+	ts = ts_open_config(0, xres, yres);
+	if (!ts) {
+		perror("ts_open_config");
 		exit(1);
 	}
 

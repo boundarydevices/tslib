@@ -153,7 +153,13 @@ int main(int argc, char * const argv[])
 	signal(SIGINT, sig);
 	signal(SIGTERM, sig);
 
-	ts = ts_open_config(0);
+	/* get xres, yres */
+	if (open_framebuffer()) {
+		close_framebuffer();
+		exit(1);
+	}
+
+	ts = ts_open_config(0, xres, yres);
 	if (!ts) {
 		perror("ts_open_config");
 		exit(1);
@@ -178,12 +184,6 @@ int main(int argc, char * const argv[])
 	} else {
 		printf("device_name read error\n");
 		device_name[0] = 0;
-	}
-
-	/* get xres, yres */
-	if (open_framebuffer()) {
-		close_framebuffer();
-		exit(1);
 	}
 
 	for (i = 0; i < NR_COLORS; i++)

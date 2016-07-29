@@ -16,10 +16,10 @@ bin_PROGRAMS		= ts_test ts_calibrate ts_calibrate_quadrant ts_print ts_print_raw
 ts_test_SOURCES		= ts_test.c fbutils.c fbutils.h font_8x8.c font_8x16.c font.h
 ts_test_LDADD		= $(top_builddir)/src/libts.la
 
-ts_print_SOURCES	= ts_print.c
+ts_print_SOURCES	= ts_print.c fbutils.c fbutils.h testutils.c testutils.h font_8x8.c font_8x16.c font.h
 ts_print_LDADD		= $(top_builddir)/src/libts.la
 
-ts_print_raw_SOURCES	= ts_print_raw.c
+ts_print_raw_SOURCES	= ts_print_raw.c fbutils.c fbutils.h testutils.c testutils.h font_8x8.c font_8x16.c font.h
 ts_print_raw_LDADD	= $(top_builddir)/src/libts.la
 
 ts_calibrate_SOURCES	= ts_calibrate.c fbutils.c fbutils.h testutils.c testutils.h font_8x8.c font_8x16.c font.h
