@@ -230,7 +230,9 @@ TSAPI struct tslib_module_info *linear_mod_init(struct tsdev *ts, const char *pa
 	lin->swap_xy  = 0;
 	lin->xMax = ts->xres;
 	lin->yMax = ts->yres;
-
+#ifdef DEBUG
+	printf("screen resolution = %dx%d\n", lin->xMax, lin->yMax);
+#endif
 	if (ioctl(ts->fd, EVIOCGABS(0), &abs) == 0) {
 		lin->iMax = abs.maximum + 1;
 		printf("iMax = %d\n", lin->iMax);
