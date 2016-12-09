@@ -42,7 +42,7 @@ static unsigned char **line_addr;
 static int fb_fd=0;
 static int bytes_per_pixel;
 static unsigned colormap [256];
-__u32 xres, yres, rotate180;
+__u32 xres, yres, rotate_mode;
 
 static char *defaultfbdevice = "/dev/fb0";
 static char *defaultconsoledevice = "/dev/tty";
@@ -126,8 +126,8 @@ int open_framebuffer(void)
 		close(fb_fd);
 		return -1;
 	}
-	xres = var.xres;
-	yres = var.yres;
+	xres = (rotate_mode & 4) ? var.yres : var.xres;
+	yres = (rotate_mode & 4) ? var.xres : var.yres;
 
 	fbuffer = mmap(NULL, fix.smem_len, PROT_READ | PROT_WRITE, MAP_FILE | MAP_SHARED, fb_fd, 0);
 	if (fbuffer == (unsigned char *)-1) {
@@ -297,13 +297,27 @@ static inline void __setpixel (union multiptr loc, unsigned xormode, unsigned co
 	}
 }
 
+unsigned char *get_fb_location(int x, int y, int mode)
+{
+	if (mode & 1)
+		y = yres - y - 1;
+	if (mode & 2)
+		x = xres - x - 1;
+	if (mode & 4) {
+		unsigned t = x;
+
+		x = y;
+		y = t;
+	}
+	return line_addr[y] + x * bytes_per_pixel;
+}
+
 void pixel (int x, int y, unsigned colidx)
 {
 	unsigned xormode;
 	union multiptr loc;
 
-	if ((x < 0) || ((__u32)x >= var.xres_virtual) ||
-	    (y < 0) || ((__u32)y >= var.yres_virtual))
+	if ( ((__u32)x >= xres) || ((__u32)y >= yres) )
 		return;
 
 	xormode = colidx & XORMODE;
@@ -317,10 +331,7 @@ void pixel (int x, int y, unsigned colidx)
 	}
 #endif
 
-	if (rotate180)
-		loc.p8 = line_addr [yres - y - 1] + (xres - x - 1) * bytes_per_pixel;
-	else
-		loc.p8 = line_addr [y] + x * bytes_per_pixel;
+	loc.p8 = get_fb_location(x, y, rotate_mode);
 	__setpixel (loc, xormode, colormap [colidx]);
 }
 
@@ -399,10 +410,9 @@ void fillrect (int x1, int y1, int x2, int y2, unsigned colidx)
 	colidx = colormap [colidx];
 
 	for (; y1 <= y2; y1++) {
-		loc.p8 = line_addr [y1] + x1 * bytes_per_pixel;
 		for (tmp = x1; tmp <= x2; tmp++) {
+			loc.p8 = get_fb_location(tmp, y1, rotate_mode);
 			__setpixel (loc, xormode, colidx);
-			loc.p8 += bytes_per_pixel;
 		}
 	}
 }

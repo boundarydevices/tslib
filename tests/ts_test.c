@@ -19,6 +19,7 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/time.h>
+#include <getopt.h>
 
 #include "tslib.h"
 #include "fbutils.h"
@@ -105,13 +106,71 @@ static void refresh_screen ()
 		button_draw (&buttons [i]);
 }
 
-int main()
+void print_usage(void)
+{
+	printf("Usage: ts_test [OPTIONS...]\n"
+		"Where OPTIONS are\n"
+		"   -h --help		Show this help\n"
+		"   -r --rotate180	screen is upside down\n"
+		"   -R --rotate_right	rotate 90 degrees right\n"
+		"   -L --rotate_left	rotate 90 degrees left\n"
+		"   -m --rotate_mode n	0 - normal, 1 - vflip, 2 - hflip, 3 - 180,\n"
+		"\t\t4 - swap x/y, 5 - left 90, 6 - right 90, 7 - swap x/y 180\n"
+		"\n");
+}
+
+int parse_opts(int argc, char * const *argv)
+{
+	int c;
+
+	static struct option long_options[] = {
+		{"help",	no_argument, 		0, 'h' },
+		{"rotate180",   no_argument,            0, 'r' },
+		{"rotate_right", no_argument,		0, 'R' },
+		{"rotate_left", no_argument,		0, 'L' },
+		{"rotate_mode", required_argument,	0, 'm' },
+		{0,		0,			0, 0 },
+	};
+
+	while ((c = getopt_long(argc, argv, "+hrRLm:", long_options, NULL)) != -1) {
+		switch (c)
+		{
+		case 'r':
+			rotate_mode = ROTATE_180;
+			break;
+		case 'R':
+			rotate_mode = ROTATE_90_RIGHT;
+			break;
+		case 'L':
+			rotate_mode = ROTATE_90_LEFT;
+			break;
+		case 'm' :
+			sscanf(optarg, "%i", &rotate_mode);
+			if (rotate_mode > 7)
+				rotate_mode = 0;
+			break;
+		case 'h':
+		case '?':
+		default:
+			print_usage();
+			return -1;
+		}
+	}
+	return 0;
+}
+
+int main(int argc, char * const argv[])
 {
 	struct tsdev *ts;
 	int x, y;
 	unsigned int i;
 	unsigned int mode = 0;
 	int quit_pressed = 0;
+	int err;
+
+	err = parse_opts(argc, argv);
+	if (err)
+		exit(1);
 
 	signal(SIGSEGV, sig);
 	signal(SIGINT, sig);

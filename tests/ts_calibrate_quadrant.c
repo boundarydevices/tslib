@@ -92,6 +92,10 @@ void print_usage(void)
 		"   -h --help		Show this help\n"
 		"   -x --xinput		xinput output format\n"
 		"   -r --rotate180	screen is upside down\n"
+		"   -R --rotate_right	rotate 90 degrees right\n"
+		"   -L --rotate_left	rotate 90 degrees left\n"
+		"   -m --rotate_mode n	0 - normal, 1 - vflip, 2 - hflip, 3 - 180,\n"
+		"\t\t4 - swap x/y, 5 - left 90, 6 - right 90, 7 - swap x/y 180\n"
 		"\n");
 }
 
@@ -101,23 +105,39 @@ int parse_opts(int argc, char * const *argv, struct opts *opts)
 
 	static struct option long_options[] = {
 		{"help",	no_argument, 		0, 'h' },
+		{"rotate180",   no_argument,            0, 'r' },
 		{"xinput",	no_argument, 		0, 'x' },
+		{"rotate_right", no_argument,		0, 'R' },
+		{"rotate_left", no_argument,		0, 'L' },
+		{"rotate_mode", required_argument,	0, 'm' },
 		{0,		0,			0, 0 },
 	};
 
-	while ((c = getopt_long(argc, argv, "+hxr", long_options, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "+hxrRLm:", long_options, NULL)) != -1) {
 		switch (c)
 		{
-		case 'h':
-		case '?':
-			print_usage();
-			return -1;
 		case 'x':
 			opts->xinput_format = 1;
 			break;
 		case 'r':
-			rotate180 = 1;
+			rotate_mode = ROTATE_180;
 			break;
+		case 'R':
+			rotate_mode = ROTATE_90_RIGHT;
+			break;
+		case 'L':
+			rotate_mode = ROTATE_90_LEFT;
+			break;
+		case 'm' :
+			sscanf(optarg, "%i", &rotate_mode);
+			if (rotate_mode > 7)
+				rotate_mode = 0;
+			break;
+		case 'h':
+		case '?':
+		default:
+			print_usage();
+			return -1;
 		}
 	}
 	return 0;
