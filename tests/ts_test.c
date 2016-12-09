@@ -106,39 +106,54 @@ static void refresh_screen ()
 		button_draw (&buttons [i]);
 }
 
-struct opts {
-	int rotate180;
-};
-
 void print_usage(void)
 {
-	printf("Usage: ts_calibrate [OPTIONS...]\n"
+	printf("Usage: ts_test [OPTIONS...]\n"
 		"Where OPTIONS are\n"
 		"   -h --help		Show this help\n"
 		"   -r --rotate180	screen is upside down\n"
+		"   -R --rotate_right	rotate 90 degrees right\n"
+		"   -L --rotate_left	rotate 90 degrees left\n"
+		"   -m --rotate_mode n	0 - normal, 1 - vflip, 2 - hflip, 3 - 180,\n"
+		"\t\t4 - swap x/y, 5 - left 90, 6 - right 90, 7 - swap x/y 180\n"
 		"\n");
 }
 
-int parse_opts(int argc, char * const *argv, struct opts *opts)
+int parse_opts(int argc, char * const *argv)
 {
 	int c;
 
 	static struct option long_options[] = {
 		{"help",	no_argument, 		0, 'h' },
-		{"rotate180",	no_argument, 		0, 'r' },
+		{"rotate180",   no_argument,            0, 'r' },
+		{"rotate_right", no_argument,		0, 'R' },
+		{"rotate_left", no_argument,		0, 'L' },
+		{"rotate_mode", required_argument,	0, 'm' },
 		{0,		0,			0, 0 },
 	};
 
-	while ((c = getopt_long(argc, argv, "+hr", long_options, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "+hrRLm:", long_options, NULL)) != -1) {
 		switch (c)
 		{
+		case 'r':
+			rotate_mode = ROTATE_180;
+			break;
+		case 'R':
+			rotate_mode = ROTATE_90_RIGHT;
+			break;
+		case 'L':
+			rotate_mode = ROTATE_90_LEFT;
+			break;
+		case 'm' :
+			sscanf(optarg, "%i", &rotate_mode);
+			if (rotate_mode > 7)
+				rotate_mode = 0;
+			break;
 		case 'h':
 		case '?':
+		default:
 			print_usage();
 			return -1;
-		case 'r':
-			opts->rotate180 = 1;
-			break;
 		}
 	}
 	return 0;
@@ -151,14 +166,11 @@ int main(int argc, char * const argv[])
 	unsigned int i;
 	unsigned int mode = 0;
 	int quit_pressed = 0;
-	struct opts opts;
 	int err;
 
-	memset(&opts, 0, sizeof(struct opts));
-	err = parse_opts(argc, argv, &opts);
+	err = parse_opts(argc, argv);
 	if (err)
 		exit(1);
-	rotate180 = opts.rotate180;
 
 	signal(SIGSEGV, sig);
 	signal(SIGINT, sig);

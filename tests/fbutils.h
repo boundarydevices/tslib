@@ -21,7 +21,16 @@
  */
 #define XORMODE	0x80000000
 
-extern __u32 xres, yres, rotate180;
+#define ROTATE_NONE		0
+#define ROTATE_VERT_FLIP	1
+#define ROTATE_HORIZ_FLIP	2
+#define ROTATE_180		3
+#define ROTATE_90_RIGHT_VFLIP	4
+#define ROTATE_90_LEFT		5
+#define ROTATE_90_RIGHT		6
+#define ROTATE_90_RIGHT_HFLIP	7
+
+extern __u32 xres, yres, rotate_mode;
 
 struct tsdev;
 int open_framebuffer(void);
