@@ -561,10 +561,10 @@ void print_usage(void)
 		"   -h --help		Show this help\n"
 		"   -9 --nine		perform 9 point calibration\n"
 		"   -r --rotate180	screen is upside down\n"
-		"   -R --rotate_right	rotate 90 degrees right\n"
-		"   -L --rotate_left	rotate 90 degrees left\n"
+		"   -R --rotate_right	rotate 90 degrees right(cw)\n"
+		"   -L --rotate_left	rotate 90 degrees left(ccw)\n"
 		"   -m --rotate_mode n	0 - normal, 1 - vflip, 2 - hflip, 3 - 180,\n"
-		"\t\t4 - swap x/y, 5 - left 90, 6 - right 90, 7 - swap x/y 180\n"
+		"\t\t4 - swap x/y, 5 - right 90(cw), 6 - left 90(ccw), 7 - swap x/y 180\n"
 		"\n");
 }
 

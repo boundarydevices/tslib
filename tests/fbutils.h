@@ -25,10 +25,10 @@
 #define ROTATE_VERT_FLIP	1
 #define ROTATE_HORIZ_FLIP	2
 #define ROTATE_180		3
-#define ROTATE_90_RIGHT_VFLIP	4
-#define ROTATE_90_LEFT		5
-#define ROTATE_90_RIGHT		6
-#define ROTATE_90_RIGHT_HFLIP	7
+#define ROTATE_90_RIGHT_HFLIP	4
+#define ROTATE_90_RIGHT		5
+#define ROTATE_90_LEFT		6
+#define ROTATE_90_RIGHT_VFLIP	7
 
 extern __u32 xres, yres, rotate_mode;
 
