@@ -211,16 +211,16 @@ TSAPI struct tslib_module_info *linear_mod_init(struct tsdev *ts, const char *pa
 	lin->module.ops = &linear_ops;
 
 // Use default values that leave ts numbers unchanged after transform
-	lin->a[0] = 65536;
-	lin->a[1] = 0;
+	lin->a[0] = 0;
+	lin->a[1] = 65536;
 	lin->a[2] = 0;
 	lin->a[3] = 0;
 	lin->a[4] = 0;
 	lin->a[5] = 0;
 
 	lin->a[6] = 0;
-	lin->a[7] = 65536;
-	lin->a[8] = 0;
+	lin->a[7] = 0;
+	lin->a[8] = 65536;
 	lin->a[9] = 0;
 	lin->a[10] = 0;
 	lin->a[11] = 0;
