@@ -1,4 +1,6 @@
-
+/*
+ * SPDX-License-Identifier: LGPL-2.1
+ */
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -27,7 +29,7 @@
  *
  * This file is placed under the LGPL.  Please see the file
  * COPYING for more details.
-*/
+ */
 
 enum {
 	PACKET_SIZE = 5,
@@ -46,7 +48,9 @@ static int touchkit_init(int dev)
 	tty.c_iflag = IGNBRK | IGNPAR;
 	tty.c_oflag = 0;
 	tty.c_lflag = 0;
+#ifdef __linux__
 	tty.c_line = 0;
+#endif
 	tty.c_cc[VTIME] = 0;
 	tty.c_cc[VMIN] = 1;
 	tty.c_cflag = CS8 | CREAD | CLOCAL | HUPCL;
@@ -57,13 +61,17 @@ static int touchkit_init(int dev)
 }
 
 static int touchkit_read(struct tslib_module_info *inf, struct ts_sample *samp,
-			 int nr)
+			 __attribute__ ((unused)) int nr)
 {
-	static int initDone = 0;
-	static unsigned char buffer[BUFFER_SIZE];	/* enough space for 2 "normal" packets */
-	static int pos = 0;
-
+	static int initDone;
+	/* enough space for 2 "normal" packets */
+	static unsigned char buffer[BUFFER_SIZE];
+	static int pos;
+	int ret;
 	struct tsdev *ts = inf->dev;
+	int p;
+	int total = 0;
+	int q;
 
 	if (initDone == 0) {
 		initDone = touchkit_init(ts->fd);
@@ -71,7 +79,7 @@ static int touchkit_read(struct tslib_module_info *inf, struct ts_sample *samp,
 			return -1;
 	}
 	/* read some new bytes (enough for 1 normal packet) */
-	int ret = read(ts->fd, buffer + pos, PACKET_SIZE);
+	ret = read(ts->fd, buffer + pos, PACKET_SIZE);
 	if (ret <= 0)
 		return -1;
 
@@ -80,18 +88,17 @@ static int touchkit_read(struct tslib_module_info *inf, struct ts_sample *samp,
 		return 0;
 
 	/* find start */
-	int p;
-	int total = 0;
 	for (p = 0; p < pos; ++p)
 		if (IsStart(buffer[p])) {
 			/* we have enough data for a packet ? */
 			if (p + PACKET_SIZE > pos) {
 				if (p > 0) {
-                                        /*
-					 * we have found a start >0, it means we have garbage
-					 * at beginning of buffer
-					 * so let's shift data to ignore this garbage
-                                         */
+					/*
+					 * we have found a start >0, it means
+					 * we have garbage at beginning of
+					 * buffer so let's shift data to ignore
+					 * this garbage
+					 */
 					memcpy(buffer, buffer + p, pos - p);
 					pos -= p;
 				}
@@ -101,7 +108,6 @@ static int touchkit_read(struct tslib_module_info *inf, struct ts_sample *samp,
 			unsigned char *data = buffer + p;
 
 			/* check if all bytes are ok (no 'start' embedded) */
-			int q;
 			for (q = 1; q < PACKET_SIZE; ++q)
 				if (IsStart(buffer[p + q]))
 					break;
@@ -144,7 +150,8 @@ static const struct tslib_ops touchkit_ops = {
 	.read = touchkit_read,
 };
 
-TSAPI struct tslib_module_info *mod_init(struct tsdev *dev, const char *params)
+TSAPI struct tslib_module_info *touchkit_mod_init(__attribute__ ((unused)) struct tsdev *dev,
+						  __attribute__ ((unused)) const char *params)
 {
 	struct tslib_module_info *m;
 
@@ -155,3 +162,6 @@ TSAPI struct tslib_module_info *mod_init(struct tsdev *dev, const char *params)
 	m->ops = &touchkit_ops;
 	return m;
 }
+#ifndef TSLIB_STATIC_TOUCHKIT_MODULE
+	TSLIB_MODULE_INIT(touchkit_mod_init);
+#endif

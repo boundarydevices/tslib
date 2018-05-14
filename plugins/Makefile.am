@@ -9,11 +9,10 @@
 #
 
 AM_CFLAGS		= -DTS_POINTERCAL=\"@TS_POINTERCAL@\" $(DEBUGFLAGS) $(LIBFLAGS) $(VIS_CFLAGS)
-LDADD		= -rpath $(PLUGIN_DIR)
-INCLUDES		= -I$(top_srcdir)/src
+LDADD			= -rpath $(PLUGIN_DIR)
+AM_CPPFLAGS		= -I$(top_srcdir)/src
   
-#LTVSN			= -version-info $(LT_CURRENT):$(LT_REVISION):$(LT_AGE) \
-#			   -release $(LT_RELEASE)
+#LTVSN			= -version-info $(LT_CURRENT):$(LT_REVISION):$(LT_AGE)
 LTVSN			= -avoid-version
 LIBS			=
 pluginexecdir		= $(PLUGIN_DIR)
@@ -24,7 +23,7 @@ else
 LINEAR_MODULE =
 endif
 
-if ENABLE_LINEAR_MODULE
+if ENABLE_DEJITTER_MODULE
 DEJITTER_MODULE = dejitter.la
 else
 DEJITTER_MODULE =
@@ -36,10 +35,46 @@ else
 VARIANCE_MODULE =
 endif
 
+if ENABLE_MEDIAN_MODULE
+MEDIAN_MODULE = median.la
+else
+MEDIAN_MODULE =
+endif
+
 if ENABLE_PTHRES_MODULE
 PTHRES_MODULE = pthres.la
 else
 PTHRES_MODULE =
+endif
+
+if ENABLE_DEBOUNCE_MODULE
+DEBOUNCE_MODULE = debounce.la
+else
+DEBOUNCE_MODULE =
+endif
+
+if ENABLE_SKIP_MODULE
+SKIP_MODULE = skip.la
+else
+SKIP_MODULE =
+endif
+
+if ENABLE_INVERT_MODULE
+INVERT_MODULE = invert.la
+else
+INVERT_MODULE =
+endif
+
+if ENABLE_IIR_MODULE
+IIR_MODULE = iir.la
+else
+IIR_MODULE =
+endif
+
+if ENABLE_LOWPASS_MODULE
+LOWPASS_MODULE = lowpass.la
+else
+LOWPASS_MODULE =
 endif
 
 if ENABLE_UCB1X00_MODULE
@@ -90,6 +125,12 @@ else
 DMC_MODULE =
 endif
 
+if ENABLE_DMC_DUS3000_MODULE
+DMC_DUS3000_MODULE = dmc_dus3000.la
+else
+DMC_DUS3000_MODULE =
+endif
+
 if ENABLE_INPUT_MODULE
 INPUT_MODULE = input.la
 else
@@ -121,11 +162,29 @@ else
 CY8MRLN_PALMPRE_MODULE =
 endif
 
+if ENABLE_WAVESHARE_MODULE
+WAVESHARE_MODULE = waveshare.la
+else
+WAVESHARE_MODULE =
+endif
+
+if ENABLE_ONE_WIRE_TS_INPUT_MODULE
+ONE_WIRE_TS_INPUT_MODULE = one_wire_ts_input.la
+else
+ONE_WIRE_TS_INPUT_MODULE =
+endif
+
 pluginexec_LTLIBRARIES = \
 	$(LINEAR_MODULE) \
 	$(DEJITTER_MODULE) \
 	$(VARIANCE_MODULE) \
+	$(MEDIAN_MODULE) \
 	$(PTHRES_MODULE) \
+	$(DEBOUNCE_MODULE) \
+	$(SKIP_MODULE) \
+	$(INVERT_MODULE) \
+	$(IIR_MODULE) \
+	$(LOWPASS_MODULE) \
 	$(UCB1X00_MODULE) \
 	$(CORGI_MODULE) \
 	$(COLLIE_MODULE) \
@@ -134,27 +193,91 @@ pluginexec_LTLIBRARIES = \
 	$(ARCTIC2_MODULE) \
 	$(TATUNG_MODULE) \
 	$(DMC_MODULE) \
+	$(DMC_DUS3000_MODULE) \
 	$(H2200_LINEAR_MODULE) \
 	$(INPUT_MODULE) \
 	$(GALAX_MODULE) \
 	$(TOUCHKIT_MODULE) \
-	$(CY8MRLN_PALMPRE_MODULE)
+	$(CY8MRLN_PALMPRE_MODULE) \
+	$(ONE_WIRE_TS_INPUT_MODULE) \
+	$(WAVESHARE_MODULE)
   
 variance_la_SOURCES	= variance.c
 variance_la_LDFLAGS	= -module $(LTVSN)
+if WINDOWS
+variance_la_LDFLAGS	+= -no-undefined
+endif
 variance_la_LIBADD	= $(top_builddir)/src/libts.la
   
+median_la_SOURCES	= median.c
+median_la_LDFLAGS	= -module $(LTVSN)
+if WINDOWS
+median_la_LDFLAGS	+= -no-undefined
+endif
+median_la_LIBADD	= $(top_builddir)/src/libts.la
+
 dejitter_la_SOURCES	= dejitter.c
 dejitter_la_LDFLAGS	= -module $(LTVSN)
+if WINDOWS
+dejitter_la_LDFLAGS	+= -no-undefined
+endif
 dejitter_la_LIBADD	= $(top_builddir)/src/libts.la
   
 linear_la_SOURCES	= linear.c
 linear_la_LDFLAGS	= -module $(LTVSN)
+if WINDOWS
+linear_la_LDFLAGS	+= -no-undefined
+endif
 linear_la_LIBADD	= $(top_builddir)/src/libts.la
 
 pthres_la_SOURCES	= pthres.c
 pthres_la_LDFLAGS	= -module $(LTVSN)
+if WINDOWS
+pthres_la_LDFLAGS	+= -no-undefined
+endif
 pthres_la_LIBADD	= $(top_builddir)/src/libts.la
+
+debounce_la_SOURCES	= debounce.c
+debounce_la_LDFLAGS	= -module $(LTVSN)
+if WINDOWS
+debounce_la_LDFLAGS	+= -no-undefined
+endif
+debounce_la_LIBADD	= $(top_builddir)/src/libts.la
+
+skip_la_SOURCES		= skip.c
+skip_la_LDFLAGS		= -module $(LTVSN)
+if WINDOWS
+skip_la_LDFLAGS		+= -no-undefined
+endif
+skip_la_LIBADD		= $(top_builddir)/src/libts.la
+
+linear_h2200_la_SOURCES	= linear-h2200.c
+linear_h2200_la_LDFLAGS	= -module $(LTVSN)
+if WINDOWS
+linear_h2200_la_LDFLAGS	+= -no-undefined
+endif
+linear_h2200_la_LIBADD	= $(top_builddir)/src/libts.la
+
+invert_la_SOURCES	= invert.c
+invert_la_LDFLAGS	= -module $(LTVSN)
+if WINDOWS
+invert_la_LDFLAGS	+= -no-undefined
+endif
+invert_la_LIBADD	= $(top_builddir)/src/libts.la
+
+iir_la_SOURCES		= iir.c
+iir_la_LDFLAGS		= -module $(LTVSN)
+if WINDOWS
+iir_la_LDFLAGS		+= -no-undefined
+endif
+iir_la_LIBADD		= $(top_builddir)/src/libts.la
+
+lowpass_la_SOURCES	= lowpass.c
+lowpass_la_LDFLAGS	= -module $(LTVSN)
+if WINDOWS
+lowpass_la_LDFLAGS	+= -no-undefined
+endif
+lowpass_la_LIBADD	= $(top_builddir)/src/libts.la
 
 # hw access
 corgi_la_SOURCES	= corgi-raw.c
@@ -181,6 +304,9 @@ tatung_la_LDFLAGS	= -module $(LTVSN)
 dmc_la_SOURCES		= dmc-raw.c
 dmc_la_LDFLAGS		= -module $(LTVSN)
 
+dmc_dus3000_la_SOURCES	= dmc_dus3000-raw.c
+dmc_dus3000_la_LDFLAGS	= -module $(LTVSN)
+
 input_la_SOURCES	= input-raw.c
 input_la_LDFLAGS	= -module $(LTVSN)
 input_la_LIBADD		= $(top_builddir)/src/libts.la
@@ -192,8 +318,14 @@ galax_la_LIBADD = $(top_builddir)/src/libts.la
 touchkit_la_SOURCES	= touchkit-raw.c
 touchkit_la_LDFLAGS	= -module $(LTVSN)
 
-linear_h2200_la_SOURCES	= linear-h2200.c
-linear_h2200_la_LDFLAGS	= -module $(LTVSN)
-
-cy8mrln_palmpre_la_SOURCES = cy8mrln-palmpre.c
+cy8mrln_palmpre_la_SOURCES = cy8mrln-palmpre.c cy8mrln.h
 cy8mrln_palmpre_la_LDFLAGS = -module $(LTVSN)
+cy8mrln_palmpre_la_LIBADD  = $(top_builddir)/src/libts.la
+
+waveshare_la_SOURCES	= waveshare-raw.c
+waveshare_la_LDFLAGS	= -module $(LTVSN)
+waveshare_la_LIBADD	= $(top_builddir)/src/libts.la
+
+one_wire_ts_input_la_SOURCES	= one-wire-ts-input-raw.c
+one_wire_ts_input_la_LDFLAGS	= -module $(LTVSN)
+one_wire_ts_input_la_LIBADD	= $(top_builddir)/src/libts.la

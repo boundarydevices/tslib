@@ -6,32 +6,35 @@
  * This file is placed under the GPL.  Please see the file
  * COPYING for more details.
  *
+ * SPDX-License-Identifier: GPL-2.0+
  *
- * Basic test program for touchscreen library.
+ *
+ * Graphical touchscreen calibration tool. This writes the configuration
+ * file used by tslib's "linear" filter plugin module to transform the
+ * touch samples according to the calibration.
  */
-#include "config.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/fcntl.h>
-#include <sys/ioctl.h>
-#include <sys/mman.h>
 #include <sys/time.h>
-#include <getopt.h>
-#include <sys/stat.h>
 #include <linux/kd.h>
 #include <linux/vt.h>
 #include <linux/fb.h>
 #include <linux/input.h>
 #include "tslib-private.h"
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <getopt.h>
+#include <errno.h>
 
 #include "tslib.h"
 
 #include "fbutils.h"
 #include "testutils.h"
+#include "ts_calibrate.h"
 
 #define u64 unsigned long long
 #define s32 int
@@ -50,22 +53,21 @@ struct cal_result {
 	s32 a[12];
 };
 
-static int palette [] =
-{
+static int palette[] = {
 	0x000000, 0xffe080, 0xffffff, 0xe0c0a0
 };
-#define NR_COLORS (sizeof (palette) / sizeof (palette [0]))
+#define NR_COLORS (sizeof(palette) / sizeof(palette[0]))
 
 static void sig(int sig)
 {
-	close_framebuffer ();
-	fflush (stderr);
-	printf ("signal %d caught\n", sig);
-	fflush (stdout);
-	exit (1);
+	close_framebuffer();
+	fflush(stderr);
+	printf("signal %d caught\n", sig);
+	fflush(stdout);
+	exit(1);
 }
 
-static void get_sample (struct tsdev *ts, struct cal_data *cal,
+static void get_sample(struct tsdev *ts, struct cal_data *cal,
 			int x, int y, char *name)
 {
 	static int last_x = -1, last_y;
@@ -75,19 +77,20 @@ static void get_sample (struct tsdev *ts, struct cal_data *cal,
 		int dx = ((x - last_x) << 16) / NR_STEPS;
 		int dy = ((y - last_y) << 16) / NR_STEPS;
 		int i;
+
 		last_x <<= 16;
 		last_y <<= 16;
 		for (i = 0; i < NR_STEPS; i++) {
-			put_cross (last_x >> 16, last_y >> 16, 2 | XORMODE);
-			usleep (1000);
-			put_cross (last_x >> 16, last_y >> 16, 2 | XORMODE);
+			put_cross(last_x >> 16, last_y >> 16, 2 | XORMODE);
+			usleep(1000);
+			put_cross(last_x >> 16, last_y >> 16, 2 | XORMODE);
 			last_x += dx;
 			last_y += dy;
 		}
 	}
 
 	put_cross(x, y, 2 | XORMODE);
-	getxy (ts, (int *)&cal->i, (int *)&cal->j);
+	getxy(ts, (int *)&cal->i, (int *)&cal->j);
 	put_cross(x, y, 2 | XORMODE);
 
 	last_x = cal->x = x;
@@ -112,10 +115,11 @@ static void clearbuf(struct tsdev *ts)
 		tv.tv_usec = 0;
 
 		nfds = select(fd + 1, &fdset, NULL, NULL, &tv);
-		if (nfds == 0) break;
+		if (nfds == 0)
+			break;
 
 		if (ts_read_raw(ts, &sample, 1) < 0) {
-			perror("ts_read");
+			perror("ts_read_raw");
 			exit(1);
 		}
 	}
@@ -554,63 +558,33 @@ struct opts {
 	int npoints;
 };
 
-void print_usage(void)
+static void help(void)
 {
-	printf("Usage: ts_calibrate [OPTIONS...]\n"
-		"Where OPTIONS are\n"
-		"   -h --help		Show this help\n"
-		"   -9 --nine		perform 9 point calibration\n"
-		"   -r --rotate180	screen is upside down\n"
-		"   -R --rotate_right	rotate 90 degrees right(cw)\n"
-		"   -L --rotate_left	rotate 90 degrees left(ccw)\n"
-		"   -m --rotate_mode n	0 - normal, 1 - vflip, 2 - hflip, 3 - 180,\n"
-		"\t\t4 - swap x/y, 5 - right 90(cw), 6 - left 90(ccw), 7 - swap x/y 180\n"
-		"\n");
+	ts_print_ascii_logo(16);
+	print_version();
+
+	printf("\n");
+	printf("Usage: ts_calibrate [-r <rotate_value>] [--version]\n");
+	printf("\n");
+	printf("-r --rotate\n");
+	printf("        <rotate_value> 0 ... no rotation; 0 degree (default)\n");
+	printf("                       1 ... clockwise orientation; 90 degrees\n");
+	printf("                       2 ... upside down orientation; 180 degrees\n");
+	printf("                       3 ... counterclockwise orientation; 270 degrees\n");
+	printf("-h --help\n");
+	printf("                       print this help text\n");
+	printf("-v --version\n");
+	printf("                       print version information only\n");
+	printf("-m --rotate_mode n	0 - normal, 1 - vflip, 2 - hflip, 3 - 180,\n");
+	printf("\t\t4 - swap x/y, 5 - right 90(cw), 6 - left 90(ccw), 7 - swap x/y 180\n");
+	printf("\n");
+	printf("Example (Linux): ts_calibrate -r $(cat /sys/class/graphics/fbcon/rotate)\n");
+	printf("\n");
 }
 
-int parse_opts(int argc, char * const *argv, struct opts *opts)
-{
-	int c;
-
-	static struct option long_options[] = {
-		{"help",	no_argument, 		0, 'h' },
-		{"nine",	no_argument, 		0, '9' },
-		{"rotate180",	no_argument, 		0, 'r' },
-		{"rotate_right", no_argument,		0, 'R' },
-		{"rotate_left", no_argument,		0, 'L' },
-		{"rotate_mode", required_argument,	0, 'm' },
-		{0,		0,			0, 0 },
-	};
-
-	while ((c = getopt_long(argc, argv, "+h9rRLm:", long_options, NULL)) != -1) {
-		switch (c)
-		{
-		case '9':
-			opts->npoints = 9;
-			break;
-		case 'r':
-			rotate_mode = ROTATE_180;
-			break;
-		case 'R':
-			rotate_mode = ROTATE_90_RIGHT;
-			break;
-		case 'L':
-			rotate_mode = ROTATE_90_LEFT;
-			break;
-		case 'm' :
-			sscanf(optarg, "%i", &rotate_mode);
-			if (rotate_mode > 7)
-				rotate_mode = 0;
-			break;
-		case 'h':
-		case '?':
-		default:
-			print_usage();
-			return -1;
-		}
-	}
-	return 0;
-}
+unsigned char rotation_lookup[] = {
+	0, ROTATE_90_RIGHT, ROTATE_180, ROTATE_90_LEFT
+};
 
 int main(int argc, char * const argv[])
 {
@@ -619,17 +593,69 @@ int main(int argc, char * const argv[])
 	int dx, dy;
 	struct cal_data cal[9];
 	struct opts opts;
-	int err;
+	unsigned rotation;
 
 	memset(&opts, 0, sizeof(struct opts));
 	opts.npoints = 5;
-	err = parse_opts(argc, argv, &opts);
-	if (err)
-		exit(1);
 
 	signal(SIGSEGV, sig);
 	signal(SIGINT, sig);
 	signal(SIGTERM, sig);
+
+	while (1) {
+		const struct option long_options[] = {
+			{ "help",         no_argument,       NULL, 'h' },
+			{ "rotate",       required_argument, NULL, 'r' },
+			{ "version",      no_argument,       NULL, 'v' },
+			{ "rotate_mode",  required_argument, NULL, 'm' },
+		};
+
+		int option_index = 0;
+		int c = getopt_long(argc, argv, "hvr:m:", long_options, &option_index);
+
+		errno = 0;
+		if (c == -1)
+			break;
+
+		switch (c) {
+		case 'h':
+			help();
+			return 0;
+
+		case 'v':
+			print_version();
+			return 0;
+
+		case 'r':
+			/* extern in fbutils.h */
+			rotation = atoi(optarg);
+			if (rotation > 3) {
+				help();
+				return 0;
+			}
+			rotate_mode = rotation_lookup[rotation];
+			break;
+
+		case 'm' :
+			rotate_mode = atoi(optarg);
+			if (rotate_mode > 7) {
+				help();
+				return 0;
+			}
+			break;
+		default:
+			help();
+			return 0;
+		}
+
+		if (errno) {
+			char str[9];
+
+			sprintf(str, "option ?");
+			str[7] = c & 0xff;
+			perror(str);
+		}
+	}
 
 	if (open_framebuffer()) {
 		close_framebuffer();
@@ -643,16 +669,16 @@ int main(int argc, char * const argv[])
 	}
 
 	for (i = 0; i < NR_COLORS; i++)
-		setcolor (i, palette [i]);
+		setcolor(i, palette[i]);
 
-	put_string_center (xres / 2, yres / 4,
-			   "TSLIB calibration utility", 1);
-	put_string_center (xres / 2, yres / 4 + 20,
-			   "Touch crosshair to calibrate", 2);
+	put_string_center(xres / 2, yres / 4,
+			  "Touchscreen calibration utility", 1);
+	put_string_center(xres / 2, yres / 4 + 20,
+			  "Touch crosshair to calibrate", 2);
 
 	printf("xres = %d, yres = %d\n", xres, yres);
 
-	// Clear the buffer
+	/* Clear the buffer */
 	clearbuf(ts);
 	dy = 50;
 	dx = (dy * xres) / yres;
@@ -680,6 +706,8 @@ int main(int argc, char * const argv[])
 
 	i = new_cal(ts, cal, opts.npoints);
 
+	fillrect(0, 0, xres - 1, yres - 1, 0);
 	close_framebuffer();
+	ts_close(ts);
 	return i;
 }

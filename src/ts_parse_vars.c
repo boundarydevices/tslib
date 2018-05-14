@@ -1,13 +1,15 @@
 /*
- *  tslib/src/ts_read.c
+ *  tslib/src/ts_parse_vars.c
  *
  *  Copyright (C) 2001 Russell King.
  *
  * This file is placed under the LGPL.  Please see the file
  * COPYING for more details.
  *
+ * SPDX-License-Identifier: LGPL-2.1
  *
- * Read raw pressure, x, y, and timestamp from a touchscreen device.
+ *
+ * Parse modules' parameters and call their own parsing functions
  */
 #include "config.h"
 
@@ -18,9 +20,13 @@
 
 #include "tslib-private.h"
 
+#if !defined HAVE_STRSEP
+#include "ts_strsep.h"
+#endif
+
 #define BUF_SIZE 1024
 
-char s_holder[BUF_SIZE];
+static char s_holder[BUF_SIZE];
 
 int tslib_parse_vars(struct tslib_module_info *mod,
 		     const struct tslib_vars *vars, int nr,
@@ -36,7 +42,11 @@ int tslib_parse_vars(struct tslib_module_info *mod,
 	s_holder[BUF_SIZE - 1] = '\0';
 
 	s = s_holder;
+#if !defined HAVE_STRSEP
+	while ((p = ts_strsep(&s, " \t")) != NULL && ret == 0) {
+#else
 	while ((p = strsep(&s, " \t")) != NULL && ret == 0) {
+#endif
 		const struct tslib_vars *v;
 		char *eq;
 

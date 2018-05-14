@@ -5,7 +5,10 @@
  *
  *  Copyright (C) 2001 Russell King.
  *
- * This file is placed under the LGPL.
+ * This file is placed under the LGPL.  Please see the file
+ * COPYING for more details.
+ *
+ * SPDX-License-Identifier: LGPL-2.1
  *
  *
  * Internal touch screen library definitions.
@@ -26,7 +29,10 @@ struct tslib_vars {
 };
 
 struct tslib_ops {
-	int (*read)(struct tslib_module_info *inf, struct ts_sample *samp, int nr);
+	int (*read)(struct tslib_module_info *inf, struct ts_sample *samp,
+		    int nr);
+	int (*read_mt)(struct tslib_module_info *inf,
+		       struct ts_sample_mt **samp, int max_slots, int nr);
 	int (*fini)(struct tslib_module_info *inf);
 };
 
@@ -37,7 +43,8 @@ struct tslib_module_info {
 	const struct tslib_ops *ops;
 };
 
-typedef struct tslib_module_info *(*tslib_module_init)(struct tsdev *dev, const char *params);
+typedef struct tslib_module_info *(*tslib_module_init)(struct tsdev *dev,
+						       const char *params);
 #define TSLIB_MODULE_INIT(f) TSAPI tslib_module_init mod_init = &f
 
 TSAPI extern int tslib_parse_vars(struct tslib_module_info *,

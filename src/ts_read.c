@@ -6,8 +6,10 @@
  * This file is placed under the LGPL.  Please see the file
  * COPYING for more details.
  *
+ * SPDX-License-Identifier: LGPL-2.1
  *
- * Read raw pressure, x, y, and timestamp from a touchscreen device.
+ *
+ * Read touch samples as tslib sample structs
  */
 #include "config.h"
 
@@ -19,28 +21,46 @@
 #include <string.h>
 #endif
 
-/* This array is used to prevent segfaults and memory overwrites
- * that can occur if multiple events are returned from ts_read_raw
- * for each event returned by ts_read
- */
-/* We found this was not needed, and have gone back to the
- * original implementation
- */
-
-// static struct ts_sample ts_read_private_samples[1024];
-
 int ts_read(struct tsdev *ts, struct ts_sample *samp, int nr)
 {
 	int result;
-//	int i;
-//	result = ts->list->ops->read(ts->list, ts_read_private_samples, nr);
-	result = ts->list->ops->read(ts->list, samp, nr);
-//	for(i=0;i<nr;i++) {
-//		samp[i] = ts_read_private_samples[i];
-//	}
 #ifdef DEBUG
-	if (result)
-		fprintf(stderr,"TS_READ----> x = %d, y = %d, pressure = %d\n", samp->x, samp->y, samp->pressure);
+	int i;
+#endif
+
+	result = ts->list->ops->read(ts->list, samp, nr);
+#ifdef DEBUG
+	for (i = 0; i < result; i++) {
+		fprintf(stderr, "TS_READ----> x = %d, y = %d, pressure = %d\n",
+			samp->x, samp->y, samp->pressure);
+
+		samp++;
+	}
+#endif
+	return result;
+
+}
+
+int ts_read_mt(struct tsdev *ts, struct ts_sample_mt **samp, int max_slots,
+	       int nr)
+{
+	int result;
+#ifdef DEBUG
+	int i, j;
+#endif
+
+	result = ts->list->ops->read_mt(ts->list, samp, max_slots, nr);
+#ifdef DEBUG
+	for (j = 0; j < result; j++) {
+		for (i = 0; i < max_slots; i++) {
+			if (!(samp[j][i].valid & TSLIB_MT_VALID))
+				continue;
+
+			ts_error("TS_READ_MT----> slot %d: x = %d, y = %d, pressure = %d\n",
+				 samp[j][i].slot, samp[j][i].x, samp[j][i].y,
+				 samp[j][i].pressure);
+		}
+	}
 #endif
 	return result;
 

@@ -1,6 +1,7 @@
 /*
  *  tslib/plugins/pthres.c
  *
+ *  Copyright (C) 2016 Martin Kepplinger <martin.kepplinger@ginzinger.com>
  *  Copyright (C) 2003 Texas Instruments, Inc.
  *
  *  Based on:
@@ -10,15 +11,17 @@
  * This file is placed under the LGPL.  Please see the file
  * COPYING for more details.
  *
+ * SPDX-License-Identifier: LGPL-2.1
+ *
+ *
  * Ensure a release is always pressure 0, and that a press is always >=1.
  */
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
 #include <stdio.h>
-#include <unistd.h>
 #include <errno.h>
 #include <limits.h>
+#include <stdint.h>
 
 #include "config.h"
 #include "tslib.h"
@@ -28,17 +31,21 @@ struct tslib_pthres {
 	struct tslib_module_info module;
 	unsigned int	pmin;
 	unsigned int	pmax;
+	int		*xsave;
+	int		*ysave;
+	int		*press;
+	int		current_max_slots;
 };
 
-static int
-pthres_read(struct tslib_module_info *info, struct ts_sample *samp, int nr)
+static int pthres_read(struct tslib_module_info *info, struct ts_sample *samp,
+		       int nr_samples)
 {
 	struct tslib_pthres *p = (struct tslib_pthres *)info;
 	int ret;
-	static int xsave = 0, ysave = 0;
-	static int press = 0;
+	static int xsave, ysave;
+	static int press;
 
-	ret = info->next->ops->read(info->next, samp, nr);
+	ret = info->next->ops->read(info->next, samp, nr_samples);
 	if (ret >= 0) {
 		int nr = 0, i;
 		struct ts_sample *s;
@@ -52,10 +59,15 @@ pthres_read(struct tslib_module_info *info, struct ts_sample *samp, int nr)
 					s->x = xsave;
 					s->y = ysave;
 				} else {
-					/* release with no press, outside bounds, dropping */
+					/* release with no press,
+					 * outside bounds, dropping
+					 */
 					int left = ret - nr - 1;
+
 					if (left > 0) {
-						memmove(s, s + 1, left * sizeof(struct ts_sample));
+						memmove(s,
+							s + 1,
+							left * sizeof(struct ts_sample));
 						s--;
 						continue;
 					}
@@ -65,8 +77,11 @@ pthres_read(struct tslib_module_info *info, struct ts_sample *samp, int nr)
 				if (s->pressure > p->pmax) {
 					/* pressure outside bounds, dropping */
 					int left = ret - nr - 1;
+
 					if (left > 0) {
-						memmove(s, s + 1, left * sizeof(struct ts_sample));
+						memmove(s,
+							s + 1,
+							left * sizeof(struct ts_sample));
 						s--;
 						continue;
 					}
@@ -84,16 +99,120 @@ pthres_read(struct tslib_module_info *info, struct ts_sample *samp, int nr)
 	return ret;
 }
 
+static int pthres_read_mt(struct tslib_module_info *info,
+			  struct ts_sample_mt **samp, int max_slots,
+			  int nr_samples)
+{
+	struct tslib_pthres *p = (struct tslib_pthres *)info;
+	int ret;
+	int i, j;
+
+	if (p->xsave == NULL || max_slots > p->current_max_slots) {
+		if (p->xsave) {
+			free(p->xsave);
+			p->xsave = NULL;
+		}
+
+		p->xsave = calloc(max_slots, sizeof(int));
+		if (!p->xsave)
+			return -ENOMEM;
+
+		p->current_max_slots = max_slots;
+	}
+
+	if (p->ysave == NULL || max_slots > p->current_max_slots) {
+		if (p->ysave) {
+			free(p->ysave);
+			p->ysave = NULL;
+		}
+
+		p->ysave = calloc(max_slots, sizeof(int));
+		if (!p->ysave)
+			return -ENOMEM;
+
+		p->current_max_slots = max_slots;
+	}
+
+	if (p->press == NULL || max_slots > p->current_max_slots) {
+		if (p->press) {
+			free(p->press);
+			p->press = NULL;
+		}
+
+		p->press = calloc(max_slots, sizeof(int));
+		if (!p->press)
+			return -ENOMEM;
+
+		p->current_max_slots = max_slots;
+	}
+
+	if (!info->next->ops->read_mt)
+		return -ENOSYS;
+
+	ret = info->next->ops->read_mt(info->next, samp, max_slots, nr_samples);
+	if (ret < 0)
+		return ret;
+
+#ifdef DEBUG
+	printf("PTHRES:   read %d samples (mem: %d nr x %d slots)\n",
+	       ret, nr_samples, max_slots);
+#endif
+
+	for (i = 0; i < ret; i++) {
+		for (j = 0; j < max_slots; j++) {
+			if (!(samp[i][j].valid & TSLIB_MT_VALID))
+				continue;
+
+			if (samp[i][j].pressure < p->pmin) {
+				if (p->press[j] != 0) {
+					/* release */
+					p->press[j] = 0;
+					samp[i][j].pressure = 0;
+					samp[i][j].x = p->xsave[j];
+					samp[i][j].y = p->ysave[j];
+				} else {
+					/* release with no press,
+					 * outside bounds, dropping
+					 */
+					samp[i][j].valid = 0;
+				}
+			} else if (samp[i][j].pressure > p->pmax) {
+				/* pressure outside bounds, dropping */
+				samp[i][j].valid = 0;
+			} else {
+				/* press */
+				p->press[j] = 1;
+				p->xsave[j] = samp[i][j].x;
+				p->ysave[j] = samp[i][j].y;
+			}
+		}
+	}
+
+	return ret;
+}
+
 static int pthres_fini(struct tslib_module_info *info)
 {
+	struct tslib_pthres *p = (struct tslib_pthres *)info;
+
+	if (p->xsave)
+		free(p->xsave);
+
+	if (p->ysave)
+		free(p->ysave);
+
+	if (p->press)
+		free(p->press);
+
 	free(info);
+
 	return 0;
 }
 
-static const struct tslib_ops pthres_ops =
-{
-	.read	= pthres_read,
-	.fini	= pthres_fini,
+static const struct tslib_ops pthres_ops = {
+	.read		= pthres_read,
+	.read_mt	= pthres_read_mt,
+	.fini		= pthres_fini,
 };
 
 static int threshold_vars(struct tslib_module_info *inf, char *str, void *data)
@@ -108,7 +227,7 @@ static int threshold_vars(struct tslib_module_info *inf, char *str, void *data)
 		return -1;
 
 	errno = err;
-	switch ((int)data) {
+	switch ((int)(intptr_t)data) {
 	case 0:
 		p->pmin = v;
 		break;
@@ -124,15 +243,15 @@ static int threshold_vars(struct tslib_module_info *inf, char *str, void *data)
 }
 
 
-static const struct tslib_vars pthres_vars[] =
-{
+static const struct tslib_vars pthres_vars[] = {
 	{ "pmin",	(void *)0, threshold_vars },
 	{ "pmax",	(void *)1, threshold_vars }
 };
 
 #define NR_VARS (sizeof(pthres_vars) / sizeof(pthres_vars[0]))
 
-TSAPI struct tslib_module_info *pthres_mod_init(struct tsdev *dev, const char *params)
+TSAPI struct tslib_module_info *pthres_mod_init(__attribute__ ((unused)) struct tsdev *dev,
+						const char *params)
 {
 
 	struct tslib_pthres *p;
@@ -145,6 +264,10 @@ TSAPI struct tslib_module_info *pthres_mod_init(struct tsdev *dev, const char *p
 
 	p->pmin = 1;
 	p->pmax = INT_MAX;
+	p->xsave = NULL;
+	p->ysave = NULL;
+	p->press = NULL;
+	p->current_max_slots = 0;
 
 	/*
 	 * Parse the parameters.

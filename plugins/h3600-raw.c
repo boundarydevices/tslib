@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: LGPL-2.1
+ */
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -12,24 +15,27 @@ struct h3600_ts_event { /* Used in the Compaq IPAQ */
 	unsigned short pad;
 };
 
-static int h3600_read(struct tslib_module_info *inf, struct ts_sample *samp, int nr)
+static int h3600_read(struct tslib_module_info *inf, struct ts_sample *samp,
+		      int nr)
 {
 	struct tsdev *ts = inf->dev;
 	struct h3600_ts_event *h3600_evt;
 	int ret;
-	int total = 0;
+	int nr_read;
+
 	h3600_evt = alloca(sizeof(*h3600_evt) * nr);
 	ret = read(ts->fd, h3600_evt, sizeof(*h3600_evt) * nr);
-	if(ret > 0) {
-		int nr = ret / sizeof(*h3600_evt);
-		while(ret >= (int)sizeof(*h3600_evt)) {
+	if (ret > 0) {
+		nr_read = ret / sizeof(*h3600_evt);
+		while (ret >= (int)sizeof(*h3600_evt)) {
 			samp->x = h3600_evt->x;
 			samp->y = h3600_evt->y;
 			samp->pressure = h3600_evt->pressure;
 #ifdef DEBUG
-        fprintf(stderr,"RAW---------------------------> %d %d %d\n",samp->x,samp->y,samp->pressure);
+	fprintf(stderr, "RAW---------------------------> %d %d %d\n",
+		samp->x, samp->y, samp->pressure);
 #endif /*DEBUG*/
-			gettimeofday(&samp->tv,NULL);
+			gettimeofday(&samp->tv, NULL);
 			samp++;
 			h3600_evt++;
 			ret -= sizeof(*h3600_evt);
@@ -38,16 +44,16 @@ static int h3600_read(struct tslib_module_info *inf, struct ts_sample *samp, int
 		return -1;
 	}
 
-	ret = nr;
+	ret = nr_read;
 	return ret;
 }
 
-static const struct tslib_ops h3600_ops =
-{
+static const struct tslib_ops h3600_ops = {
 	.read	= h3600_read,
 };
 
-TSAPI struct tslib_module_info *h3600_mod_init(struct tsdev *dev, const char *params)
+TSAPI struct tslib_module_info *h3600_mod_init(__attribute__ ((unused)) struct tsdev *dev,
+					       __attribute__ ((unused)) const char *params)
 {
 	struct tslib_module_info *m;
 

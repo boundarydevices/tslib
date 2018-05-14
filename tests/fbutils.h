@@ -8,12 +8,13 @@
  * This file is placed under the GPL.  Please see the
  * file COPYING for details.
  *
+ * SPDX-License-Identifier: GPL-2.0+
  */
 
 #ifndef _FBUTILS_H
 #define _FBUTILS_H
 
-#include <asm/types.h>
+#include <stdint.h>
 
 /* This constant, being ORed with the color index tells the library
  * to draw in exclusive-or mode (that is, drawing the same second time
@@ -30,7 +31,7 @@
 #define ROTATE_90_LEFT		6
 #define ROTATE_90_RIGHT_VFLIP	7
 
-extern __u32 xres, yres, rotate_mode;
+extern uint32_t xres, yres, rotate_mode;
 
 struct tsdev;
 int open_framebuffer(void);
@@ -39,9 +40,9 @@ void setcolor(unsigned colidx, unsigned value);
 void put_cross(int x, int y, unsigned colidx);
 void put_string(int x, int y, char *s, unsigned colidx);
 void put_string_center(int x, int y, char *s, unsigned colidx);
-void pixel (int x, int y, unsigned colidx);
-void line (int x1, int y1, int x2, int y2, unsigned colidx);
-void rect (int x1, int y1, int x2, int y2, unsigned colidx);
-void fillrect (int x1, int y1, int x2, int y2, unsigned colidx);
+void pixel(int x, int y, unsigned colidx);
+void line(int x1, int y1, int x2, int y2, unsigned colidx);
+void rect(int x1, int y1, int x2, int y2, unsigned colidx);
+void fillrect(int x1, int y1, int x2, int y2, unsigned colidx);
 
 #endif /* _FBUTILS_H */

@@ -5,7 +5,10 @@
  *
  *  Copyright (C) 2001 Russell King.
  *
- * This file is placed under the LGPL.
+ * This file is placed under the LGPL.  Please see the file
+ * COPYING for more details.
+ *
+ * SPDX-License-Identifier: LGPL-2.1
  *
  *
  * Internal touch screen library definitions.
@@ -19,10 +22,13 @@ extern "C" {
 
 struct tsdev {
 	int fd;
+	char *eventpath;
 	struct tslib_module_info *list;
-	struct tslib_module_info *list_raw; /* points to position in 'list' where raw reads
-					       come from.  default is the position of the
-					       ts_read_raw module. */
+	/* points to position in 'list' where raw reads
+	 * come from.  default is the position of the
+	 * ts_read_raw module.
+	 */
+	struct tslib_module_info *list_raw;
 	unsigned xres;
 	unsigned yres;
 	unsigned int res_x;
