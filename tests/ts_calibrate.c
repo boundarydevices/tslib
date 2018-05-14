@@ -575,6 +575,7 @@ static void help(void)
 	printf("                       print this help text\n");
 	printf("-v --version\n");
 	printf("                       print version information only\n");
+	printf("-9 --nine              perform 9 point calibration\n");
 	printf("-m --rotate_mode n	0 - normal, 1 - vflip, 2 - hflip, 3 - 180,\n");
 	printf("\t\t4 - swap x/y, 5 - right 90(cw), 6 - left 90(ccw), 7 - swap x/y 180\n");
 	printf("\n");
@@ -605,13 +606,14 @@ int main(int argc, char * const argv[])
 	while (1) {
 		const struct option long_options[] = {
 			{ "help",         no_argument,       NULL, 'h' },
+			{ "nine",	  no_argument,	     NULL, '9' },
 			{ "rotate",       required_argument, NULL, 'r' },
 			{ "version",      no_argument,       NULL, 'v' },
 			{ "rotate_mode",  required_argument, NULL, 'm' },
 		};
 
 		int option_index = 0;
-		int c = getopt_long(argc, argv, "hvr:m:", long_options, &option_index);
+		int c = getopt_long(argc, argv, "hv9r:m:", long_options, &option_index);
 
 		errno = 0;
 		if (c == -1)
@@ -626,6 +628,9 @@ int main(int argc, char * const argv[])
 			print_version();
 			return 0;
 
+		case '9':
+			opts.npoints = 9;
+			break;
 		case 'r':
 			/* extern in fbutils.h */
 			rotation = atoi(optarg);
