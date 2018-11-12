@@ -131,7 +131,8 @@ free:
 
 static const char * const input_choices[] = {"/dev/input/ts",
 	"/dev/input/event0", "/dev/input/event1",
-	"/dev/input/event2", "/dev/touchscreen/ucb1x00",
+	"/dev/input/event2", "/dev/input/event3",
+	"/dev/touchscreen/ucb1x00",
 };
 
 #define DIV_ROUND_UP(n,d) (((n) + (d) - 1) / (d))
