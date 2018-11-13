@@ -159,9 +159,14 @@ static int is_touchscreen(struct tsdev *ts)
 	}
 
 	ret = ioctl(ts->fd, EVIOCGBIT(EV_ABS, sizeof(absbit)), absbit);
-	if ( (ret < 0) || !(absbit[BIT_WORD(ABS_X)] & BIT_MASK(ABS_X)) ||
-		!(absbit[BIT_WORD(ABS_Y)] & BIT_MASK(ABS_Y))) {
+	if (ret < 0)
 		return 0;
+	if ( !(absbit[BIT_WORD(ABS_X)] & BIT_MASK(ABS_X)) ||
+			!(absbit[BIT_WORD(ABS_Y)] & BIT_MASK(ABS_Y))) {
+		if ( !(absbit[BIT_WORD(ABS_MT_POSITION_X)] & BIT_MASK(ABS_MT_POSITION_X)) ||
+				!(absbit[BIT_WORD(ABS_MT_POSITION_Y)] & BIT_MASK(ABS_MT_POSITION_Y))) {
+			return 0;
+		}
 	}
 	return 1;
 }

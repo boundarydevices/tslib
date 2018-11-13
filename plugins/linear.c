@@ -253,6 +253,14 @@ static const struct tslib_vars linear_vars[] = {
 	{ "pressure_div", NULL, linear_p_div},
 };
 
+#define DIV_ROUND_UP(n,d) (((n) + (d) - 1) / (d))
+#define BIT(nr)                 (1UL << (nr))
+#define BIT_MASK(nr)            (1UL << ((nr) % BITS_PER_LONG))
+#define BIT_WORD(nr)            ((nr) / BITS_PER_LONG)
+#define BITS_PER_BYTE           8
+#define BITS_PER_LONG           (sizeof(long) * BITS_PER_BYTE)
+#define BITS_TO_LONGS(nr)       DIV_ROUND_UP(nr, BITS_PER_BYTE * sizeof(long))
+
 #define NR_VARS (sizeof(linear_vars) / sizeof(linear_vars[0]))
 
 TSAPI struct tslib_module_info *linear_mod_init(struct tsdev *ts,
@@ -265,6 +273,10 @@ TSAPI struct tslib_module_info *linear_mod_init(struct tsdev *ts,
 	int index;
 	char *calfile;
 	struct input_absinfo abs;
+	int abs_x = ABS_X;
+	int abs_y = ABS_Y;
+	int ret;
+	long absbit[BITS_TO_LONGS(ABS_CNT)];
 
 	lin = malloc(sizeof(struct tslib_linear));
 	if (lin == NULL)
@@ -295,13 +307,22 @@ TSAPI struct tslib_module_info *linear_mod_init(struct tsdev *ts,
 #ifdef DEBUG
 	printf("screen resolution = %dx%d\n", lin->xMax, lin->yMax);
 #endif
-	if (ioctl(ts->fd, EVIOCGABS(0), &abs) == 0) {
+	ret = ioctl(ts->fd, EVIOCGBIT(EV_ABS, sizeof(absbit)), absbit);
+	if (ret >= 0) {
+		if ( (absbit[BIT_WORD(ABS_MT_POSITION_X)] & BIT_MASK(ABS_MT_POSITION_X)) &&
+			(absbit[BIT_WORD(ABS_MT_POSITION_Y)] & BIT_MASK(ABS_MT_POSITION_Y))) {
+			abs_x = ABS_MT_POSITION_X;
+			abs_y = ABS_MT_POSITION_Y;
+		}
+	}
+
+	if (ioctl(ts->fd, EVIOCGABS(abs_x), &abs) == 0) {
 		lin->iMax = abs.maximum + 1;
 		printf("iMax = %d\n", lin->iMax);
 	} else {
 		printf("iMax read error, defaulting to 2048\n");
 	}
-	if (ioctl(ts->fd, EVIOCGABS(1), &abs) == 0) {
+	if (ioctl(ts->fd, EVIOCGABS(abs_y), &abs) == 0) {
 		lin->jMax = abs.maximum + 1;
 		printf("jMax = %d\n", lin->jMax);
 	} else {
